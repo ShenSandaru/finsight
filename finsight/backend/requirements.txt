@@ -1,0 +1,18 @@
+# Web Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# Database
+sqlalchemy==2.0.23
+asyncpg==0.29.0
+pgvector==0.2.4
+
+# Configuration
+pydantic-settings==2.1.0
+python-dotenv==1.0.0
+
+# Redis
+redis==5.0.1
+
+# HTTP Client (for API calls)
+httpx==0.25.2
