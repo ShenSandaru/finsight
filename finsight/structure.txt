@@ -1,0 +1,86 @@
+finsight/
+├── docker-compose.yml
+├── .env.example
+├── README.md
+│
+├── backend/
+│   ├── Dockerfile
+│   ├── pyproject.toml
+│   ├── alembic.ini
+│   ├── alembic/
+│   │   └── versions/
+│   ├── app/
+│   │   ├── __init__.py
+│   │   ├── main.py
+│   │   ├── config.py
+│   │   ├── database.py
+│   │   ├── models/
+│   │   │   ├── __init__.py
+│   │   │   ├── user.py
+│   │   │   ├── document.py
+│   │   │   ├── chunk.py
+│   │   │   └── report.py
+│   │   ├── schemas/
+│   │   │   ├── __init__.py
+│   │   │   ├── document.py
+│   │   │   └── query.py
+│   │   ├── api/
+│   │   │   ├── __init__.py
+│   │   │   ├── routes/
+│   │   │   │   ├── documents.py
+│   │   │   │   ├── query.py
+│   │   │   │   ├── reports.py
+│   │   │   │   └── health.py
+│   │   │   └── deps.py
+│   │   ├── services/
+│   │   │   ├── __init__.py
+│   │   │   ├── document_parser.py
+│   │   │   ├── chunker.py
+│   │   │   ├── embedder.py
+│   │   │   ├── retriever.py
+│   │   │   └── report_generator.py
+│   │   └── agents/
+│   │       ├── __init__.py
+│   │       ├── orchestrator.py
+│   │       ├── retriever_agent.py
+│   │       ├── analyzer_agent.py
+│   │       ├── chart_agent.py
+│   │       └── writer_agent.py
+│   └── tests/
+│       ├── conftest.py
+│       ├── test_parser.py
+│       └── test_retriever.py
+│
+├── frontend/
+│   ├── Dockerfile
+│   ├── package.json
+│   ├── next.config.js
+│   ├── tailwind.config.ts
+│   ├── tsconfig.json
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── layout.tsx
+│   │   │   ├── page.tsx
+│   │   │   ├── dashboard/
+│   │   │   │   └── page.tsx
+│   │   │   ├── documents/
+│   │   │   │   └── page.tsx
+│   │   │   ├── query/
+│   │   │   │   └── page.tsx
+│   │   │   └── reports/
+│   │   │       └── page.tsx
+│   │   ├── components/
+│   │   │   ├── ui/            # shadcn components
+│   │   │   ├── chat/
+│   │   │   ├── documents/
+│   │   │   ├── charts/
+│   │   │   └── layout/
+│   │   ├── lib/
+│   │   │   ├── api.ts
+│   │   │   └── utils.ts
+│   │   └── hooks/
+│   │       └── useQuery.ts
+│   └── public/
+│
+└── data/
+    └── sample_filings/       # Sample 10-K PDFs for testing
