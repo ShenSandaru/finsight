@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+from pathlib import Path
 
 
 class Settings(BaseSettings):
@@ -22,6 +23,11 @@ class Settings(BaseSettings):
     # OpenAI
     OPENAI_API_KEY: str = ""
 
+    # File Storage
+    STORAGE_PATH: Path = Path("/app/storage")
+    MAX_FILE_SIZE: int = 50 * 1024 * 1024  # 50MB in bytes
+    ALLOWED_FILE_TYPES: list[str] = ["pdf", "txt", "csv"]
+
     @property
     def DATABASE_URL(self) -> str:
         return (
@@ -35,6 +41,10 @@ class Settings(BaseSettings):
     @property
     def REDIS_URL(self) -> str:
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}"
+
+    @property
+    def DOCUMENTS_PATH(self) -> Path:
+        return self.STORAGE_PATH / "documents"
 
     class Config:
         env_file = ".env"

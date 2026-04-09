@@ -1,24 +1,24 @@
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.core.database import init_db
-from app.models import Document, Chunk, Report 
+from app.models import Document, Chunk, Report
+from app.api.routes import documents
 
 settings = get_settings()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     print(f"🚀 Starting {settings.APP_NAME} v{settings.APP_VERSION}")
     await init_db()
     print("✅ Database tables created")
 
     yield
 
-    # Shutdown
     print("👋 Shutting down...")
 
 
@@ -36,6 +36,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Register routers
+app.include_router(documents.router, prefix="/api/v1")
 
 
 @app.get("/health")

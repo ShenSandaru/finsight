@@ -16,3 +16,7 @@ redis==5.0.1
 
 # HTTP Client (for API calls)
 httpx==0.25.2
+
+# File handling
+aiofiles==23.2.1
+python-multipart==0.0.6
