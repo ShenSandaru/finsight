@@ -91,10 +91,45 @@ Once the application is running via Docker Compose, the services will be availab
 *   **PostgreSQL:** `localhost:5432`
 *   **Redis:** `localhost:6379`
 
-## 📝 Future Development
+## 📝 Development Progress
 
-- [ ] Implement the `frontend` architecture.
-- [ ] Expand AI agent capabilities.
-- [ ] Implement robust user authentication.
+### Infrastructure & Core Setup
+```
+├─────────────────────────────────────────────────────┤
+│ [✅] Step 1: Docker + PostgreSQL + pgvector         │
+│ [✅] Step 2: FastAPI project skeleton               │
+│ [✅] Step 3: Database models (Document, Chunk)      │
+│ [✅] Step 4: Document upload API                    │
+├─────────────────────────────────────────────────────┤
+```
+
+### Document Processing Pipeline
+```
+├─────────────────────────────────────────────────────┤
+│ [🔄] Step 5: PDF parsing (Unstructured.io)          │  ← We are here now
+│ [ ] Step 6: Table-aware chunking                    │
+│ [ ] Step 7: Embedding generation (OpenAI)           │
+│ [ ] Step 8: Vector storage in pgvector              │
+├─────────────────────────────────────────────────────┤
+```
+
+### Query & Retrieval System
+```
+├─────────────────────────────────────────────────────┤
+│ [ ] Step 9: Vector similarity search                │
+│ [ ] Step 10: Basic RAG query pipeline               │
+│ [ ] Step 11: Multi-agent orchestrator (LangGraph)   │
+│ [ ] Step 12: Citation/evidence tracing              │
+├─────────────────────────────────────────────────────┤
+```
+
+### Frontend & Polish
+```
+├─────────────────────────────────────────────────────┤
+│ [ ] Step 13: Report generation endpoint             │
+│ [ ] Step 14: React frontend                         │
+│ [ ] Step 15: Production deployment                  │
+├─────────────────────────────────────────────────────┤
+```
 
 
