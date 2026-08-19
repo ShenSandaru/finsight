@@ -14,8 +14,7 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print(f"🚀 Starting {settings.APP_NAME} v{settings.APP_VERSION}")
-    await init_db()
-    print("✅ Database tables created")
+    print("✅ Ready to handle requests (schema managed via Alembic)")
 
     yield
 

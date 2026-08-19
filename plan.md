@@ -127,8 +127,8 @@ flowchart TD
 * **Why Needed:** Document parsing and embedding are long-running operations that will timeout or block HTTP requests. Alembic is essential for managing vector index creation and future schema changes.
 * **Current Status:** Not Implemented.
 * **Tasks:**
-  - [ ] Add `alembic` to `backend/requirements.txt` and initialize migrations (`alembic init alembic`).
-  - [ ] Generate baseline migration representing existing `Document`, `Chunk`, and `Report` tables.
+  - [x] Add `alembic` to `backend/requirements.txt` and initialize migrations (`alembic init alembic`).
+  - [x] Generate baseline migration representing existing `Document`, `Chunk`, and `Report` tables.
   - [ ] Implement async background processing using Redis (either using `ARQ`, `Celery`, or FastAPI background task manager with Redis state tracking).
   - [ ] Create standardized service exception classes and uniform API error schemas.
 * **Files Likely Affected:**
