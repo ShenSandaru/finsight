@@ -51,6 +51,24 @@ services:
       redis:
         condition: service_healthy
 
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: finsight_worker
+    restart: unless-stopped
+    command: ["arq", "app.worker.WorkerSettings"]
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+      - ./backend/storage:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
 volumes:
   postgres_data:
   redis_data:

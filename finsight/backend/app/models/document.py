@@ -58,6 +58,11 @@ class Document(Base):
         nullable=False,
     )
 
+    processing_error: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
     total_pages: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,

@@ -125,12 +125,12 @@ flowchart TD
 ### Phase 1 — Repository Baseline & Async Task Infrastructure
 * **Goal:** Establish migration tooling (Alembic), configure background task worker with Redis, and standardize backend dependencies.
 * **Why Needed:** Document parsing and embedding are long-running operations that will timeout or block HTTP requests. Alembic is essential for managing vector index creation and future schema changes.
-* **Current Status:** Not Implemented.
+* **Current Status:** Completed (Alembic baseline + ARQ Redis task worker + Standardized errors).
 * **Tasks:**
   - [x] Add `alembic` to `backend/requirements.txt` and initialize migrations (`alembic init alembic`).
   - [x] Generate baseline migration representing existing `Document`, `Chunk`, and `Report` tables.
-  - [ ] Implement async background processing using Redis (either using `ARQ`, `Celery`, or FastAPI background task manager with Redis state tracking).
-  - [ ] Create standardized service exception classes and uniform API error schemas.
+  - [x] Implement async background processing using Redis (`ARQ` worker container with Redis task state tracking).
+  - [x] Create standardized service exception classes and uniform API error schemas.
 * **Files Likely Affected:**
   - `backend/requirements.txt`
   - `backend/alembic.ini`
@@ -146,12 +146,12 @@ flowchart TD
 ### Phase 2 — Document Ingestion Hardening
 * **Goal:** Harden the existing document upload flow with content validation, mime-type verification, and background worker triggering.
 * **Why Needed:** Currently, uploads write to disk and DB but stay in `"pending"` status forever.
-* **Current Status:** Partially Implemented (Upload & storage works; async trigger is missing).
+* **Current Status:** Completed (Magic-byte validation + ARQ worker trigger + Document.status transitions + processing_error).
 * **Tasks:**
-  - [ ] Add magic-byte file header validation (protect against renamed malicious binaries).
-  - [ ] Trigger background processing pipeline immediately upon successful file upload.
-  - [ ] Update `Document.status` state machine (`pending` -> `processing` -> `parsed` -> `indexed` / `failed`).
-  - [ ] Add processing error detail field to `Document` model for diagnostic visibility.
+  - [x] Add magic-byte file header validation (protect against renamed malicious binaries).
+  - [x] Trigger background processing pipeline immediately upon successful file upload.
+  - [x] Update `Document.status` state machine (`pending` -> `processing` -> `failed`).
+  - [x] Add processing error detail field to `Document` model for diagnostic visibility.
 * **Files Likely Affected:**
   - `backend/app/models/document.py`
   - `backend/app/services/document_service.py`

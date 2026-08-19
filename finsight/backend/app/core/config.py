@@ -16,9 +16,12 @@ class Settings(BaseSettings):
     POSTGRES_HOST: str
     POSTGRES_PORT: int = 5432
 
-    # Redis
+    # Redis & Task Queue
     REDIS_HOST: str = "redis"
     REDIS_PORT: int = 6379
+    ARQ_QUEUE_NAME: str = "finsight_tasks"
+    TASK_MAX_TRIES: int = 3
+    TASK_TIMEOUT_SECONDS: int = 300
 
     # OpenAI
     OPENAI_API_KEY: str = ""

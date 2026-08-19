@@ -1,4 +1,4 @@
-y"""initial baseline migration for documents chunks and reports
+"""initial baseline migration for documents chunks and reports
 
 Revision ID: 0001_initial_schema
 Revises: 
