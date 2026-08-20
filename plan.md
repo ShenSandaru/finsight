@@ -164,22 +164,26 @@ flowchart TD
 ### Phase 3 — PDF & Document Parsing
 * **Goal:** Implement robust text and page extraction from financial documents (10-K, 10-Q, earnings transcripts).
 * **Why Needed:** RAG requires granular text extraction mapped accurately to page numbers for source citations.
-* **Current Status:** In Progress (On branch `feat/pdf-parsing`).
+* **Current Status:** Sprint 3.1 Completed (PDFParserService + page extraction + boundary tracking + metadata + error handling verified). Sprint 3.2 (TXT/CSV and advanced cleanup) is next.
 * **Tasks:**
-  - [ ] Add `pypdf` / `pdfplumber` or `unstructured` to `backend/requirements.txt`.
-  - [ ] Create `PDFParserService` (`app/services/pdf_parser.py`) supporting:
-    - Page-by-page text extraction.
-    - Page boundary tracking.
-    - Header/footer and boilerplate noise reduction.
-    - Document metadata extraction (title, total pages, author/creation date).
-  - [ ] Handle malformed/corrupted PDF exceptions gracefully and mark `document.status = "failed"`.
-  - [ ] Support plain text (`.txt`) and CSV (`.csv`) parsing.
+  - [x] Add `pypdf==4.1.0` to `backend/requirements.txt`.
+  - [x] Create `PDFParserService` (`app/services/pdf_parser.py`) supporting:
+    - [x] Page-by-page text extraction and 1-indexed numbering.
+    - [x] Page boundary tracking with empty/blank page preservation.
+    - [x] Conservative, lightweight text normalization.
+    - [x] Document metadata extraction (title, total pages, author/creator/creation date).
+  - [x] Handle malformed, missing, and encrypted PDF exceptions gracefully with `document.status = "failed"` and `processing_error`.
+  - [x] Wire `process_document` task in `app/tasks/definitions.py` with `Document.status` transition (`pending` -> `processing` -> `parsed`/`failed`).
+  - [ ] Support plain text (`.txt`) and CSV (`.csv`) parsing (Sprint 3.2).
+  - [ ] Advanced boilerplate/header/footer detection (Sprint 3.2).
 * **Files Likely Affected:**
   - `backend/requirements.txt`
   - `backend/app/services/pdf_parser.py`
-  - `backend/app/services/document_service.py`
+  - `backend/app/tasks/definitions.py`
+  - `backend/tests/`
+  - `docs/development/pdf-parsing.md`
 * **Acceptance Criteria:**
-  - Parsed PDF produces a structured document representation: page numbers, raw text, and page metadata without dropping pages or crashing on standard corporate 10-K filings.
+  - Parsed PDF produces a structured document representation (`ParsedDocument` with `ParsedPage`s): page numbers, raw text, and page metadata without dropping pages or crashing on standard corporate 10-K filings.
 
 ---
 

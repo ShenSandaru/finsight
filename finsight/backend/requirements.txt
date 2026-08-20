@@ -22,3 +22,6 @@ httpx==0.25.2
 # File handling
 aiofiles==23.2.1
 python-multipart==0.0.6
+
+# Document Processing
+pypdf==4.1.0
