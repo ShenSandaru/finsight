@@ -1,4 +1,4 @@
-"""Unit and integration tests for PDFParserService and process_document task orchestration (Sprint 3.1)."""
+"""Unit and integration tests for PDFParserService and process_document task orchestration (Sprint 3.1 & 3.2)."""
 
 import io
 import unittest
@@ -12,9 +12,7 @@ from pypdf import PdfWriter
 from pypdf.generic import (
     NameObject,
     DictionaryObject,
-    ArrayObject,
     DecodedStreamObject,
-    IndirectObject,
 )
 
 from app.core.exceptions import ProcessingError
@@ -28,12 +26,9 @@ def generate_test_pdf(
     metadata: dict[str, str] | None = None,
     password: str | None = None,
 ) -> bytes:
-    """
-    Generate synthetic PDF bytes with font resources and content streams so pypdf can extract text.
-    """
+    """Generate synthetic PDF bytes with font resources and content streams."""
     writer = PdfWriter()
 
-    # Font definition for standard Helvetica
     font_dict = DictionaryObject({
         NameObject("/Type"): NameObject("/Font"),
         NameObject("/Subtype"): NameObject("/Type1"),
@@ -44,12 +39,8 @@ def generate_test_pdf(
 
     for text in pages_text:
         page = writer.add_blank_page(width=612, height=792)
-        
-        # Add Resources dict pointing to F1
         resources = DictionaryObject({
-            NameObject("/Font"): DictionaryObject({
-                NameObject("/F1"): font_ref
-            })
+            NameObject("/Font"): DictionaryObject({NameObject("/F1"): font_ref})
         })
         page[NameObject("/Resources")] = resources
 
@@ -192,7 +183,6 @@ class TestPDFParserService(unittest.TestCase):
     def test_07_malformed_pdf(self):
         """TEST 7: Malformed/corrupt PDF raises FinSight ProcessingError without leaking internals."""
         file_path = self.temp_path / "corrupt.pdf"
-        # Starts with valid magic bytes to pass upload validation, followed by garbage bytes
         file_path.write_bytes(b"%PDF-1.7\nCorrupted binary data that is not a valid PDF")
 
         with self.assertRaises(ProcessingError) as ctx:
@@ -230,36 +220,7 @@ class TestPDFParserService(unittest.TestCase):
 
 
 class TestIdempotencyAndTaskFlow(unittest.TestCase):
-    """Test suite covering task orchestration, status transitions, TXT/CSV handling, and idempotency."""
-
-    def test_unsupported_txt_and_csv_types(self):
-        """Verify that TXT/CSV handling returns failed with controlled reason and does not call PDFParser."""
-        async def run():
-            ctx = {"job_id": "job-test-unsupported"}
-            doc_id = uuid.uuid4()
-
-            mock_doc = MagicMock(spec=Document)
-            mock_doc.id = doc_id
-            mock_doc.status = "pending"
-            mock_doc.file_type = "txt"
-            mock_doc.filename = "report.txt"
-
-            mock_result = MagicMock()
-            mock_result.scalar_one_or_none.return_value = mock_doc
-
-            mock_session = AsyncMock()
-            mock_session.execute = AsyncMock(return_value=mock_result)
-            mock_session.commit = AsyncMock()
-
-            with patch("app.tasks.definitions.async_session") as mock_session_ctx:
-                mock_session_ctx.return_value.__aenter__.return_value = mock_session
-                res = await process_document(ctx, str(doc_id))
-
-            self.assertEqual(res["status"], "failed")
-            self.assertEqual(mock_doc.status, "failed")
-            self.assertIn("TXT parsing is not implemented yet", mock_doc.processing_error)
-
-        asyncio.run(run())
+    """Test suite covering task orchestration, status transitions, and idempotency."""
 
     def test_idempotency_skip_non_pending(self):
         """Verify process_document skips execution if status is already 'parsed', 'processing', or 'failed'."""

@@ -164,7 +164,7 @@ flowchart TD
 ### Phase 3 — PDF & Document Parsing
 * **Goal:** Implement robust text and page extraction from financial documents (10-K, 10-Q, earnings transcripts).
 * **Why Needed:** RAG requires granular text extraction mapped accurately to page numbers for source citations.
-* **Current Status:** Sprint 3.1 Completed (PDFParserService + page extraction + boundary tracking + metadata + error handling verified). Sprint 3.2 (TXT/CSV and advanced cleanup) is next.
+* **Current Status:** Completed (Sprint 3.1 PDF parsing + Sprint 3.2 TXT/CSV parsing and conservative boilerplate filtering verified).
 * **Tasks:**
   - [x] Add `pypdf==4.1.0` to `backend/requirements.txt`.
   - [x] Create `PDFParserService` (`app/services/pdf_parser.py`) supporting:
@@ -174,16 +174,19 @@ flowchart TD
     - [x] Document metadata extraction (title, total pages, author/creator/creation date).
   - [x] Handle malformed, missing, and encrypted PDF exceptions gracefully with `document.status = "failed"` and `processing_error`.
   - [x] Wire `process_document` task in `app/tasks/definitions.py` with `Document.status` transition (`pending` -> `processing` -> `parsed`/`failed`).
-  - [ ] Support plain text (`.txt`) and CSV (`.csv`) parsing (Sprint 3.2).
-  - [ ] Advanced boilerplate/header/footer detection (Sprint 3.2).
+  - [x] Support plain text (`.txt`) parsing (`TextParserService`) and CSV (`.csv`) parsing (`CSVParserService`) (Sprint 3.2).
+  - [x] Conservative repeated boilerplate and header/footer detection (`PDFParserService.filter_repeated_boilerplate`) (Sprint 3.2).
 * **Files Likely Affected:**
   - `backend/requirements.txt`
   - `backend/app/services/pdf_parser.py`
+  - `backend/app/services/text_parser.py`
+  - `backend/app/services/csv_parser.py`
   - `backend/app/tasks/definitions.py`
   - `backend/tests/`
   - `docs/development/pdf-parsing.md`
 * **Acceptance Criteria:**
   - Parsed PDF produces a structured document representation (`ParsedDocument` with `ParsedPage`s): page numbers, raw text, and page metadata without dropping pages or crashing on standard corporate 10-K filings.
+  - Parsed TXT and CSV produce structured `ParsedDocument`s representing 1 logical page with tabular structure preserved.
 
 ---
 

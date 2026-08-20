@@ -1,7 +1,8 @@
-"""PDF document parser service providing page-by-page text extraction and metadata parsing."""
+"""PDF document parser service providing page-by-page text extraction, boilerplate filtering, and metadata parsing."""
 
 import re
 import logging
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -16,7 +17,7 @@ logger = logging.getLogger("finsight.services.pdf_parser")
 
 @dataclass
 class ParsedPage:
-    """Structured in-memory representation of a single extracted PDF page."""
+    """Structured in-memory representation of a single extracted document page."""
 
     page_number: int  # 1-indexed
     text: str
@@ -27,7 +28,7 @@ class ParsedPage:
 
 @dataclass
 class ParsedDocument:
-    """Structured in-memory representation of an entire parsed PDF document."""
+    """Structured in-memory representation of an entire parsed document."""
 
     document_id: str
     filename: str
@@ -86,6 +87,115 @@ class PDFParserService:
 
         return metadata
 
+    @classmethod
+    def filter_repeated_boilerplate(cls, pages: list[ParsedPage]) -> list[ParsedPage]:
+        """
+        Conservative repeated header/footer and page-number boilerplate filtering across multi-page documents.
+        
+        Rules:
+        1. Only applies to documents with 3 or more pages.
+        2. Inspects top 2 lines (header candidate) and bottom 2 lines (footer candidate) of each page.
+        3. Identifies lines appearing in >= 75% of non-empty pages AND across at least 3 distinct pages.
+        4. Excludes purely numeric / financial currency lines (e.g., "$100", "2025", "150.50") to prevent data loss.
+        5. Matches common page number patterns like "Page X of Y" or "- X -" across pages.
+        6. Removes only verified matching header/footer lines from the page boundaries.
+        """
+        if len(pages) < 3:
+            return pages
+
+        # Collect non-empty page lines
+        page_lines_list: list[list[str]] = []
+        for p in pages:
+            if not p.text:
+                page_lines_list.append([])
+            else:
+                page_lines_list.append([line.strip() for line in p.text.split("\n") if line.strip()])
+
+        non_empty_pages = [lines for lines in page_lines_list if len(lines) > 0]
+        if len(non_empty_pages) < 3:
+            return pages
+
+        min_occurrences = max(3, int(len(non_empty_pages) * 0.75))
+
+        # Helper to check if a line is a protected financial value
+        def is_protected_financial_content(line: str) -> bool:
+            clean = line.replace("$", "").replace("€", "").replace("£", "").replace(",", "").replace("%", "").strip()
+            # If line is a number or currency amount, protect it
+            try:
+                float(clean)
+                return True
+            except ValueError:
+                pass
+            # Protect common financial statement table lines
+            if any(term in line.lower() for term in ("revenue", "net income", "total assets", "operating expense", "cash flow")):
+                return True
+            return False
+
+        # Pattern for "Page X of Y", "Page X", "- X -"
+        page_num_regex = re.compile(r"^(?:page\s+\d+(?:\s+(?:of|\/)\s+\d+)?|\-?\s*\d+\s*\-?)$", re.IGNORECASE)
+
+        # Count candidate header lines (top 2 lines) and footer lines (bottom 2 lines)
+        header_candidates: Counter[str] = Counter()
+        footer_candidates: Counter[str] = Counter()
+
+        for lines in non_empty_pages:
+            top_slice = lines[:2]
+            bottom_slice = lines[-2:] if len(lines) >= 2 else []
+
+            # Check for exact matches
+            for line in top_slice:
+                if not is_protected_financial_content(line) and len(line) >= 3:
+                    header_candidates[line] += 1
+            for line in bottom_slice:
+                if not is_protected_financial_content(line) and len(line) >= 3:
+                    footer_candidates[line] += 1
+
+        # Identify qualified boilerplate lines
+        boilerplate_headers = {
+            line for line, count in header_candidates.items() if count >= min_occurrences
+        }
+        boilerplate_footers = {
+            line for line, count in footer_candidates.items() if count >= min_occurrences
+        }
+
+        # Apply filtering to each page
+        filtered_pages: list[ParsedPage] = []
+        for idx, page in enumerate(pages):
+            lines = page_lines_list[idx]
+            if not lines:
+                filtered_pages.append(page)
+                continue
+
+            new_lines = list(lines)
+
+            # Strip top header if matching boilerplate or page number regex
+            while new_lines and (
+                new_lines[0] in boilerplate_headers or page_num_regex.match(new_lines[0])
+            ):
+                new_lines.pop(0)
+
+            # Strip bottom footer if matching boilerplate or page number regex
+            while new_lines and (
+                new_lines[-1] in boilerplate_footers or page_num_regex.match(new_lines[-1])
+            ):
+                new_lines.pop(-1)
+
+            new_text = "\n".join(new_lines).strip()
+            char_count = len(new_text)
+            is_empty = char_count == 0
+
+            filtered_pages.append(
+                ParsedPage(
+                    page_number=page.page_number,
+                    text=new_text,
+                    char_count=char_count,
+                    is_empty=is_empty,
+                    metadata=page.metadata,
+                )
+            )
+
+        return filtered_pages
+
     def extract_text_and_metadata(self, file_path: Path, document_id: str = "") -> ParsedDocument:
         """
         Extract page-by-page text and document metadata from a PDF file.
@@ -125,7 +235,6 @@ class PDFParserService:
         # Check encryption flag on reader
         if reader.is_encrypted:
             try:
-                # Attempt default decrypt for empty-password encrypted PDFs
                 decrypt_result = reader.decrypt("")
                 if decrypt_result == 0:
                     raise ProcessingError(
@@ -180,10 +289,13 @@ class PDFParserService:
                 )
             )
 
+        # Apply conservative boilerplate filtering across pages
+        filtered_pages = self.filter_repeated_boilerplate(parsed_pages)
+
         return ParsedDocument(
             document_id=document_id,
             filename=file_path.name,
             total_pages=total_pages,
             metadata=doc_metadata,
-            pages=parsed_pages,
+            pages=filtered_pages,
         )

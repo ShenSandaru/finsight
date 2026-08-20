@@ -10,6 +10,8 @@ from app.core.config import get_settings
 from app.core.exceptions import ProcessingError
 from app.models.document import Document
 from app.services.pdf_parser import PDFParserService
+from app.services.text_parser import TextParserService
+from app.services.csv_parser import CSVParserService
 
 logger = logging.getLogger("finsight.worker.tasks")
 settings = get_settings()
@@ -17,8 +19,9 @@ settings = get_settings()
 
 async def process_document(ctx: dict[str, Any], document_id_str: str) -> dict[str, Any]:
     """
-    Ingestion task orchestration for Sprint 3.1.
-    Loads Document, transitions to 'processing', invokes PDFParserService, updates total_pages and metadata,
+    Ingestion task orchestration for Sprint 3.1 & 3.2.
+    Loads Document, transitions to 'processing', invokes the appropriate parser
+    (PDFParserService, TextParserService, CSVParserService), updates total_pages and metadata,
     and advances status to 'parsed'.
     """
     job_id = ctx.get("job_id", "unknown")
@@ -68,53 +71,43 @@ async def process_document(ctx: dict[str, Any], document_id_str: str) -> dict[st
             if document.file_type == "pdf":
                 parser = PDFParserService()
                 parsed_doc = parser.extract_text_and_metadata(file_path=file_path, document_id=str(doc_uuid))
-
-                # Update metadata from parsed PDF
-                document.total_pages = parsed_doc.total_pages
-                if not document.title and parsed_doc.metadata.get("title"):
-                    document.title = parsed_doc.metadata["title"]
-
-                # State transition 2: processing -> parsed
-                document.status = "parsed"
-                document.processing_error = None
-                await session.commit()
-
-                duration = time.perf_counter() - start_time
-                logger.info(
-                    "Successfully parsed PDF document '%s' (%d pages) in %.4fs [job_id=%s]",
-                    doc_uuid,
-                    parsed_doc.total_pages,
-                    duration,
-                    job_id,
-                )
-
-                return {
-                    "status": "parsed",
-                    "document_id": str(doc_uuid),
-                    "filename": document.filename,
-                    "total_pages": parsed_doc.total_pages,
-                    "duration_seconds": round(duration, 4),
-                }
-
-            elif document.file_type in ("txt", "csv"):
-                # Controlled limitation: TXT/CSV parsing is scheduled for a future sprint
-                logger.warning(
-                    "Parsing for '%s' files is not implemented yet [document_id=%s]",
-                    document.file_type.upper(),
-                    doc_uuid,
-                )
-                document.status = "failed"
-                document.processing_error = f"{document.file_type.upper()} parsing is not implemented yet"
-                await session.commit()
-
-                return {
-                    "status": "failed",
-                    "document_id": str(doc_uuid),
-                    "reason": f"{document.file_type.upper()} parsing not yet implemented",
-                }
-
+            elif document.file_type == "txt":
+                txt_parser = TextParserService()
+                parsed_doc = txt_parser.extract_text_and_metadata(file_path=file_path, document_id=str(doc_uuid))
+            elif document.file_type == "csv":
+                csv_parser = CSVParserService()
+                parsed_doc = csv_parser.extract_text_and_metadata(file_path=file_path, document_id=str(doc_uuid))
             else:
                 raise ProcessingError(f"Unsupported file type: {document.file_type}")
+
+            # Update metadata from parsed document
+            document.total_pages = parsed_doc.total_pages
+            if not document.title and parsed_doc.metadata.get("title"):
+                document.title = parsed_doc.metadata["title"]
+
+            # State transition 2: processing -> parsed
+            document.status = "parsed"
+            document.processing_error = None
+            await session.commit()
+
+            duration = time.perf_counter() - start_time
+            logger.info(
+                "Successfully parsed %s document '%s' (%d pages) in %.4fs [job_id=%s]",
+                document.file_type.upper(),
+                doc_uuid,
+                parsed_doc.total_pages,
+                duration,
+                job_id,
+            )
+
+            return {
+                "status": "parsed",
+                "document_id": str(doc_uuid),
+                "filename": document.filename,
+                "file_type": document.file_type,
+                "total_pages": parsed_doc.total_pages,
+                "duration_seconds": round(duration, 4),
+            }
 
         except Exception as exc:
             await session.rollback()

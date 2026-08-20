@@ -1,110 +1,128 @@
-# PDF Document Parsing Architecture (Sprint 3.1) — FinSight
+# Document Parsing Architecture (PDF, TXT, CSV) — FinSight
 
-This document details the architecture, design decisions, data contracts, and integration workflows for FinSight's PDF parsing service.
+This document details the architecture, design decisions, data contracts, and integration workflows for FinSight's document parsing services across PDF, Plain Text (.txt), and CSV formats, including conservative boilerplate filtering.
 
 ---
 
-## 1. Library Selection: pypdf (v4.1.0)
+## 1. Parsers & Format Handlers
 
-### Why pypdf?
-For Sprint 3.1, `pypdf` was selected as the foundational PDF text extraction and document inspection engine:
-1. **Lightweight & Pure Python:** Has zero system-level C/C++ or Tesseract dependencies, keeping the Docker image minimal and portable.
-2. **Deterministic Page-by-Page Extraction:** Provides fine-grained iterator access over physical PDF pages with explicit boundary preservation.
-3. **Metadata & Catalog Access:** Efficiently extracts document catalog metadata (`title`, `author`, `creator`, `creation_date`) without reading full page streams upfront.
-4. **Resilience & Encryption Detection:** Clear API for identifying encrypted documents, empty text streams, and invalid PDF catalog structures.
+FinSight implements a modular, format-specific parser service layer producing a unified in-memory representation:
+
+```
+                  ┌──────────────────────┐
+                  │ POST /documents/upload│
+                  └──────────┬───────────┘
+                             │
+                             ▼
+                  ┌──────────────────────┐
+                  │     Redis / ARQ      │
+                  └──────────┬───────────┘
+                             │
+                             ▼
+                  ┌──────────────────────┐
+                  │   process_document   │
+                  └──────────┬───────────┘
+                             │
+       ┌─────────────────────┼─────────────────────┐
+       ▼                     ▼                     ▼
+┌──────────────┐      ┌──────────────┐      ┌──────────────┐
+│  PDF Parser  │      │  Text Parser │      │  CSV Parser  │
+│(pypdf v4.1.0)│      │(.txt handler)│      │(Python csv)  │
+└──────┬───────┘      └──────┬───────┘      └──────┬───────┘
+       │                     │                     │
+       └─────────────────────┼─────────────────────┘
+                             │
+                             ▼
+                  ┌──────────────────────┐
+                  │    ParsedDocument    │
+                  │ (Unified In-Memory)  │
+                  └──────────┬───────────┘
+                             │
+                             ▼
+                  ┌──────────────────────┐
+                  │ Document.total_pages │
+                  │  status = 'parsed'   │
+                  └──────────────────────┘
+```
 
 ---
 
 ## 2. In-Memory Data Contracts
 
-The parser produces structured in-memory dataclasses defined in `app/services/pdf_parser.py`:
+All parsers output the shared dataclass structures defined in `app/services/pdf_parser.py`:
 
 ### `ParsedPage`
-Represents an individual physical PDF page:
-- `page_number` (`int`): 1-indexed sequential physical page number.
+Represents an individual extracted page (or logical page):
+- `page_number` (`int`): 1-indexed sequential page number.
 - `text` (`str`): Normalized text extracted from the page.
-- `char_count` (`int`): Length of `text` (`len(text)`).
-- `is_empty` (`bool`): `True` if `char_count == 0` (e.g. scanned image page or blank separator).
-- `metadata` (`dict[str, Any]`): Page-specific metadata (e.g., `{"page_number": N}`).
+- `char_count` (`int`): Character length (`len(text)`).
+- `is_empty` (`bool`): `True` if `char_count == 0`.
+- `metadata` (`dict[str, Any]`): Page-specific metadata (e.g. format, column names, tabular row slices).
 
 ### `ParsedDocument`
 Represents the entire parsed document:
 - `document_id` (`str`): UUID string of the document.
-- `filename` (`str`): Base filename on disk.
-- `total_pages` (`int`): Total count of physical pages in the PDF.
-- `metadata` (`dict[str, Any]`): Document-level metadata extracted from PDF catalog.
-- `pages` (`list[ParsedPage]`): Sequential list of all pages in physical order.
-
-> **Important:** No database tables are created for `ParsedPage` or `ParsedDocument` in Sprint 3.1. These structures serve as the in-memory contract for subsequent chunking and embedding pipelines.
+- `filename` (`str`): Stored filename.
+- `total_pages` (`int`): Total physical pages (PDF) or logical pages (TXT/CSV).
+- `metadata` (`dict[str, Any]`): Document-level metadata.
+- `pages` (`list[ParsedPage]`): Sequential list of `ParsedPage` items.
 
 ---
 
-## 3. PDFParserService Responsibilities
+## 3. Format Parser Specifications
 
-Implemented in `app/services/pdf_parser.py`:
-1. **File Path Verification:** Validates that the target file exists on storage disk and is accessible.
-2. **Integrity & Encryption Guards:** Catches encrypted/password-protected PDFs and malformed binary files, raising standardized `ProcessingError`.
-3. **Page Iteration & Extraction:** Iterates through every physical page without dropping empty pages or losing boundaries.
-4. **Lightweight Text Normalization:**
-   - Normalizes CRLF (`\r\n`) and CR (`\r`) to LF (`\n`).
-   - Converts horizontal tabs (`\t`) to single spaces.
-   - Collapses 3+ consecutive newlines into 2 (`\n\n`) to preserve paragraph structure without unbounded whitespace.
-   - Trims outer leading/trailing blank whitespace.
-   - *Preserves numbers, punctuation, casing, and intra-line word boundaries intact.*
-5. **Metadata Extraction:** Extracts standard PDF metadata (`title`, `author`, `creator`, `producer`, `creation_date`) into JSON-safe dictionaries without hallucinating missing fields.
+### A. PDFParserService (`app/services/pdf_parser.py`)
+- **Engine:** `pypdf` (v4.1.0).
+- **Page Extraction:** Iterates through physical PDF pages, preserving 1-indexed page boundaries and tracking empty/scanned pages.
+- **Normalization:** Converts CRLF/CR to LF, converts horizontal tabs to spaces, collapses 3+ newlines to 2, and strips outer whitespace.
+- **Metadata Extraction:** Extracts `title`, `author`, `creator`, `producer`, and `creation_date` from the PDF document catalog.
+- **Boilerplate Filtering:** Applies conservative repeated header/footer and page-number filtering across multi-page documents ($\ge 3$ pages).
 
----
+### B. TextParserService (`app/services/text_parser.py`)
+- **Format:** Plain text (`.txt`).
+- **Logical Page Convention:** Text files have no physical pages; they are represented as **1 logical page** (`total_pages = 1`, `pages = [ParsedPage(page_number=1, ...)]`).
+- **Decoding Strategy:** Multi-encoding cascade checking UTF-8 with BOM (`utf-8-sig`), standard `utf-8`, and `latin-1`. Explicitly rejects binary null bytes (`\x00`).
+- **Metadata:** `{ "format": "txt", "encoding": "...", "character_count": ..., "raw_byte_size": ... }`.
 
-## 4. Ingestion Pipeline & Worker Integration
-
-The asynchronous document processing workflow transitions through the following stages:
-
-```
-1. Client POST /api/v1/documents/upload
-   │
-   ▼
-2. Validation & Save to Disk -> Status: 'pending' (DB Transaction Committed)
-   │
-   ▼
-3. Enqueue 'process_document' to Redis ('finsight_tasks')
-   │
-   ▼
-4. ARQ Worker consumes task
-   │
-   ▼
-5. State Transition 1: Status = 'processing'
-   │
-   ▼
-6. PDFParserService.extract_text_and_metadata(file_path)
-   ├── [Success] ──> Update Document.total_pages & title
-   │                 State Transition 2: Status = 'parsed', processing_error = None
-   │
-   └── [Failure] ──> Catch ProcessingError / Exception
-                     State Transition 2: Status = 'failed', processing_error = '<safe message>'
-```
-
-### Path Resolution Convention
-Resolves files using `DocumentService`'s standard storage path:
-`settings.DOCUMENTS_PATH / f"{doc_uuid}_{document.filename}"`
-
-### Idempotency
-`process_document` strictly checks that `document.status == "pending"`. If the document is already `processing`, `parsed`, or `failed`, duplicate executions are safely skipped without side effects.
+### C. CSVParserService (`app/services/csv_parser.py`)
+- **Format:** Comma-Separated Values (`.csv`).
+- **Logical Page Convention:** CSV files are represented as **1 logical page** (`total_pages = 1`).
+- **Tabular Preservation:** Uses Python's standard `csv.reader` to preserve rows, columns, quoted strings, and embedded commas.
+- **Metadata:**
+  - Document metadata: `{ "format": "csv", "encoding": "...", "column_names": [...], "column_count": N, "row_count": M }`.
+  - Page metadata: `{ "page_number": 1, "format": "csv", "column_names": [...], "rows": [...] }`.
+- **Text Representation:** Normalizes tabular rows into clean, uniform CSV text lines suitable for future chunking.
 
 ---
 
-## 5. Non-PDF Files (TXT / CSV)
+## 4. Conservative Boilerplate Filtering Algorithm
 
-- Upload of `.txt` and `.csv` files is supported at the API layer.
-- In Sprint 3.1, TXT and CSV parsing is intentionally deferred.
-- When a `.txt` or `.csv` task is consumed, the worker sets `status = "failed"` with `processing_error = "TXT/CSV parsing is not implemented yet"`, avoiding tasks becoming stuck in `processing`.
+Implemented in `PDFParserService.filter_repeated_boilerplate`:
+
+1. **Activation Threshold:** Only runs on multi-page documents with $\ge 3$ non-empty pages.
+2. **Boundary Candidate Inspection:** Inspects only the top 2 lines (header candidates) and bottom 2 lines (footer candidates) of each page.
+3. **Repetition Frequency:** Identifies non-numeric strings occurring in $\ge 75\%$ of pages across at least 3 distinct pages.
+4. **Financial & Numeric Guardrails:** Explicitly protects numeric amounts, currency values (`$`, `€`, `£`, `100.50`), years (`2025`), and critical accounting headings (`Revenue`, `Total Assets`, `Net Income`, `Operating Expense`, `Cash Flow`) from being deleted.
+5. **Page Number Regex:** Strips explicit page numbers at the top/bottom matching patterns like `Page X of Y`, `Page X`, or `- X -`.
 
 ---
 
-## 6. Intentionally Deferred Features (Future Sprints)
+## 5. Ingestion Pipeline & Worker Integration
 
-The following components are explicitly **NOT** part of Sprint 3.1:
-- ❌ **Table Extraction & Detection:** Structured financial tables (Balance Sheets, Income Statements) will be extracted in Phase 4.
-- ❌ **OCR / Scanned PDF Recognition:** Handled in future multimodal/OCR phases.
-- ❌ **Chunking:** Chunk generation and database persistence in `chunks` table will be implemented in Phase 5.
-- ❌ **Embeddings & Vector Search:** Embedding generation and pgvector similarity querying are scheduled for Phase 6.
-- ❌ **RAG & Agent Workflows:** Multi-agent LangGraph orchestrator is scheduled for subsequent phases.
+The `process_document` task in `app/tasks/definitions.py`:
+1. Checks idempotency: skips execution if `document.status != "pending"`.
+2. Transitions: `pending` $\rightarrow$ `processing` $\rightarrow$ `parsed` (or `failed`).
+3. Dispatches to `PDFParserService`, `TextParserService`, or `CSVParserService` based on `document.file_type`.
+4. Sets `Document.total_pages` ($N$ for PDF, $1$ for TXT/CSV).
+5. Populates `Document.title` from document metadata if not already specified.
+6. Cleans up `Document.processing_error` upon success or sets concise diagnostic upon failure.
+
+---
+
+## 6. Intentionally Deferred Features (Future Phases)
+
+- ❌ **Financial Table Classification:** Automatic classification of Balance Sheets, Income Statements, and Cash Flow tables (Phase 4).
+- ❌ **Markdown Table Normalization:** Markdown syntax table generation from complex PDF table layouts (Phase 4).
+- ❌ **Chunking:** Chunk generation and database persistence in `chunks` table (Phase 5).
+- ❌ **Embeddings & Vector Search:** pgvector embeddings and similarity search (Phase 6).
+- ❌ **Multi-Agent RAG:** LangGraph orchestration (Phase 7+).

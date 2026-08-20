@@ -1,4 +1,4 @@
-"""End-to-end integration test runner for Sprint 3.1."""
+"""End-to-end integration test runner for Sprint 3.1 & Sprint 3.2 (PDF, TXT, CSV, and Boilerplate filtering)."""
 
 import io
 import json
@@ -104,31 +104,35 @@ def run_e2e_tests():
     assert doc_corrupt["processing_error"] is not None, "Expected populated processing_error"
     print("  ✅ E2E 2 PASSED: Malformed PDF cleanly handled pending -> processing -> failed.")
 
-    # 3. TXT file upload test
-    print("\n[E2E 3] Uploading TXT file (controlled unsupported behavior)...")
-    txt_bytes = b"Sample financial statement text content."
-    up_resp_txt = upload_multipart("statement.txt", txt_bytes, content_type="text/plain")
+    # 3. TXT file upload test (Sprint 3.2 Full Parsing Flow)
+    print("\n[E2E 3] Uploading plain text (.txt) file...")
+    txt_bytes = b"FinSight Earnings Summary\nQ3 Revenue reached $2.5 billion with 18% YoY growth."
+    up_resp_txt = upload_multipart("earnings_summary.txt", txt_bytes, content_type="text/plain")
     txt_id = up_resp_txt["document"]["id"]
     print(f"  -> Uploaded successfully. Initial status: {up_resp_txt['document']['status']} (id={txt_id})")
+    assert up_resp_txt["document"]["status"] == "pending", f"Expected initial 'pending', got {up_resp_txt['document']['status']}"
 
     doc_txt = poll_document(txt_id)
-    print(f"  -> Final Status: {doc_txt['status']}, Processing Error: '{doc_txt['processing_error']}'")
-    assert doc_txt["status"] == "failed", f"Expected 'failed', got {doc_txt['status']}"
-    assert "TXT parsing is not implemented yet" in (doc_txt["processing_error"] or ""), f"Unexpected error: {doc_txt['processing_error']}"
-    print("  ✅ E2E 3 PASSED: TXT file handled with controlled failure status.")
+    print(f"  -> Final Status: {doc_txt['status']}, Total Pages: {doc_txt['total_pages']}, Error: {doc_txt['processing_error']}")
+    assert doc_txt["status"] == "parsed", f"Expected 'parsed', got {doc_txt['status']}"
+    assert doc_txt["total_pages"] == 1, f"Expected total_pages=1 for TXT, got {doc_txt['total_pages']}"
+    assert doc_txt["processing_error"] is None, f"Expected null processing_error, got {doc_txt['processing_error']}"
+    print("  ✅ E2E 3 PASSED: TXT file parsed successfully pending -> processing -> parsed.")
 
-    # 4. CSV file upload test
-    print("\n[E2E 4] Uploading CSV file (controlled unsupported behavior)...")
-    csv_bytes = b"Quarter,Revenue,NetIncome\nQ1,100,20\nQ2,120,25\n"
-    up_resp_csv = upload_multipart("metrics.csv", csv_bytes, content_type="text/csv")
+    # 4. CSV file upload test (Sprint 3.2 Full Parsing Flow)
+    print("\n[E2E 4] Uploading structured CSV (.csv) file...")
+    csv_bytes = b"Metric,2024,2025\nTotalRevenue,1000,1200\nOperatingIncome,300,380\nNetIncome,220,280\n"
+    up_resp_csv = upload_multipart("financial_metrics.csv", csv_bytes, content_type="text/csv")
     csv_id = up_resp_csv["document"]["id"]
     print(f"  -> Uploaded successfully. Initial status: {up_resp_csv['document']['status']} (id={csv_id})")
+    assert up_resp_csv["document"]["status"] == "pending", f"Expected initial 'pending', got {up_resp_csv['document']['status']}"
 
     doc_csv = poll_document(csv_id)
-    print(f"  -> Final Status: {doc_csv['status']}, Processing Error: '{doc_csv['processing_error']}'")
-    assert doc_csv["status"] == "failed", f"Expected 'failed', got {doc_csv['status']}"
-    assert "CSV parsing is not implemented yet" in (doc_csv["processing_error"] or ""), f"Unexpected error: {doc_csv['processing_error']}"
-    print("  ✅ E2E 4 PASSED: CSV file handled with controlled failure status.")
+    print(f"  -> Final Status: {doc_csv['status']}, Total Pages: {doc_csv['total_pages']}, Error: {doc_csv['processing_error']}")
+    assert doc_csv["status"] == "parsed", f"Expected 'parsed', got {doc_csv['status']}"
+    assert doc_csv["total_pages"] == 1, f"Expected total_pages=1 for CSV, got {doc_csv['total_pages']}"
+    assert doc_csv["processing_error"] is None, f"Expected null processing_error, got {doc_csv['processing_error']}"
+    print("  ✅ E2E 4 PASSED: CSV file parsed successfully pending -> processing -> parsed.")
 
     print("\n==================================================")
     print("ALL END-TO-END TESTS PASSED SUCCESSFULLY! 🎉")
