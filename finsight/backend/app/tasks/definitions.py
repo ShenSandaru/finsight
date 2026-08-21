@@ -1,20 +1,24 @@
+
 import time
 import uuid
 import logging
 from typing import Any
 from collections import Counter
 
-from sqlalchemy import select
+from sqlalchemy import select, delete
 
 from app.core.database import async_session
 from app.core.config import get_settings
 from app.core.exceptions import ProcessingError
 from app.models.document import Document
+from app.models.chunk import Chunk
 from app.services.pdf_parser import PDFParserService
 from app.services.text_parser import TextParserService
 from app.services.csv_parser import CSVParserService
 from app.services.table_extractor import TableExtractorService
 from app.services.table_semantics import FinancialTableSemanticService, StatementType
+from app.services.chunker import TableAwareChunkerService
+from app.services.embedding_service import EmbeddingService
 
 logger = logging.getLogger("finsight.worker.tasks")
 settings = get_settings()
@@ -22,11 +26,11 @@ settings = get_settings()
 
 async def process_document(ctx: dict[str, Any], document_id_str: str) -> dict[str, Any]:
     """
-    Ingestion task orchestration for Sprint 3.1, 3.2, 4.1 & 4.2.
-    Loads Document, transitions to 'processing', invokes the appropriate parser
-    (PDFParserService, TextParserService, CSVParserService), extracts tables for PDFs
-    via TableExtractorService and enriches them in-memory via FinancialTableSemanticService
-    without storing chunks, updates total_pages and metadata, and advances status to 'parsed'.
+    Ingestion task orchestration for Sprint 3.1, 3.2, 4.1, 4.2, 5.1 & 6.1.
+    Loads Document, transitions to 'processing', invokes the appropriate parser,
+    extracts & semantically enriches tables for PDFs, generates structured chunks,
+    persists Chunk records (parsed), generates 1536-dimensional Gemini embeddings
+    outside of DB transactions, atomically persists embeddings, and advances status to 'indexed'.
     """
     job_id = ctx.get("job_id", "unknown")
     try:
@@ -36,7 +40,9 @@ async def process_document(ctx: dict[str, Any], document_id_str: str) -> dict[st
         return {"status": "error", "message": "Invalid UUID format"}
 
     logger.info("Processing document [id=%s, job_id=%s]", doc_uuid, job_id)
+    start_time = time.perf_counter()
 
+    # Step 1: Parsing & Chunk Persistence Transaction (processing -> parsed)
     async with async_session() as session:
         try:
             # Fetch document record
@@ -63,16 +69,18 @@ async def process_document(ctx: dict[str, Any], document_id_str: str) -> dict[st
 
             table_count = 0
             statement_counts: dict[str, int] = {}
+            extracted_tables = []
+
             if document.file_type == "pdf":
                 parser = PDFParserService()
                 parsed_doc = parser.extract_text_and_metadata(file_path=file_path, document_id=str(doc_uuid))
 
-                # Extract financial tables in-memory (Sprint 4.1 - no database Chunk rows created)
+                # Extract financial tables
                 table_extractor = TableExtractorService()
                 extracted_tables = table_extractor.extract_tables_from_pdf(file_path=file_path, document_id=str(doc_uuid))
                 table_count = len(extracted_tables)
 
-                # Enrich tables with semantic classification & period context (Sprint 4.2 - in-memory)
+                # Enrich tables with semantic classification & period context
                 semantic_service = FinancialTableSemanticService()
                 for tbl in extracted_tables:
                     tbl.semantics = semantic_service.analyze_table(tbl)
@@ -89,8 +97,32 @@ async def process_document(ctx: dict[str, Any], document_id_str: str) -> dict[st
             else:
                 raise ProcessingError(f"Unsupported file type: {document.file_type}")
 
-            # Update metadata from parsed document
+            # Generate Chunks (Sprint 5.1 - TableAwareChunkerService)
+            chunker = TableAwareChunkerService()
+            chunks_data = chunker.create_chunks(parsed_doc, extracted_tables)
+
+            # Atomic database transaction:
+            # 1. Delete existing chunks for this document (idempotency/retry safety)
+            await session.execute(delete(Chunk).where(Chunk.document_id == doc_uuid))
+
+            # 2. Bulk insert newly generated Chunk ORM records
+            db_chunks = [
+                Chunk(
+                    document_id=doc_uuid,
+                    content=c.content,
+                    chunk_type=c.chunk_type,
+                    chunk_index=c.chunk_index,
+                    page_number=c.page_number,
+                    metadata_=c.metadata,
+                    embedding=None,
+                )
+                for c in chunks_data
+            ]
+            session.add_all(db_chunks)
+
+            # 3. Update document metadata and transition status
             document.total_pages = parsed_doc.total_pages
+            document.total_chunks = len(chunks_data)
             if not document.title and parsed_doc.metadata.get("title"):
                 document.title = parsed_doc.metadata["title"]
 
@@ -99,59 +131,137 @@ async def process_document(ctx: dict[str, Any], document_id_str: str) -> dict[st
             document.processing_error = None
             await session.commit()
 
-            duration = time.perf_counter() - start_time
-            if document.file_type == "pdf":
-                logger.info(
-                    "Successfully processed PDF document '%s' (%d pages, %d tables extracted [Income Statements: %d, Balance Sheets: %d, Cash Flows: %d, Unknown: %d]) in %.4fs [job_id=%s]",
-                    doc_uuid,
-                    parsed_doc.total_pages,
-                    table_count,
-                    statement_counts.get(StatementType.INCOME_STATEMENT, 0),
-                    statement_counts.get(StatementType.BALANCE_SHEET, 0),
-                    statement_counts.get(StatementType.CASH_FLOW, 0),
-                    statement_counts.get(StatementType.UNKNOWN, 0),
-                    duration,
-                    job_id,
-                )
-            else:
-                logger.info(
-                    "Successfully processed %s document '%s' (%d pages, %d tables extracted) in %.4fs [job_id=%s]",
-                    document.file_type.upper(),
-                    doc_uuid,
-                    parsed_doc.total_pages,
-                    table_count,
-                    duration,
-                    job_id,
-                )
-
-            return {
-                "status": "parsed",
-                "document_id": str(doc_uuid),
-                "filename": document.filename,
-                "file_type": document.file_type,
-                "total_pages": parsed_doc.total_pages,
-                "tables_extracted": table_count,
-                "duration_seconds": round(duration, 4),
-            }
-
         except Exception as exc:
             await session.rollback()
-            logger.exception("Failed to process document '%s' in job [%s]: %s", doc_uuid, job_id, exc)
+            logger.exception("Failed during parsing/chunking for document '%s' in job [%s]: %s", doc_uuid, job_id, exc)
 
-            # Record failure state on document record
             try:
-                result = await session.execute(
-                    select(Document).where(Document.id == doc_uuid)
-                )
-                doc_to_fail = result.scalar_one_or_none()
-                if doc_to_fail:
-                    doc_to_fail.status = "failed"
-                    doc_to_fail.processing_error = str(exc)[:500]
-                    await session.commit()
+                async with async_session() as err_session:
+                    result = await err_session.execute(
+                        select(Document).where(Document.id == doc_uuid)
+                    )
+                    doc_to_fail = result.scalar_one_or_none()
+                    if doc_to_fail:
+                        doc_to_fail.status = "failed"
+                        doc_to_fail.processing_error = str(exc)[:500]
+                        await err_session.commit()
             except Exception as inner_exc:
                 logger.error("Could not record failed status for document '%s': %s", doc_uuid, inner_exc)
 
             raise
+
+    # Step 2: Query Stored Chunks (Read Only, Closed Immediately)
+    async with async_session() as read_session:
+        result = await read_session.execute(
+            select(Chunk).where(Chunk.document_id == doc_uuid).order_by(Chunk.chunk_index)
+        )
+        persisted_chunks = result.scalars().all()
+
+    # Zero-chunk handling (Rule 16)
+    if not persisted_chunks:
+        logger.error("No chunks available for embedding for document '%s' [job_id=%s]", doc_uuid, job_id)
+        async with async_session() as err_session:
+            result = await err_session.execute(select(Document).where(Document.id == doc_uuid))
+            doc_to_fail = result.scalar_one_or_none()
+            if doc_to_fail:
+                doc_to_fail.status = "failed"
+                doc_to_fail.processing_error = "No chunks available for embedding"
+                await err_session.commit()
+        raise ProcessingError("No chunks available for embedding", details={"document_id": str(doc_uuid)})
+
+    # Idempotency check: if all chunks already have non-null embeddings, skip generation
+    if all(c.embedding is not None for c in persisted_chunks):
+        logger.info("All chunks already have embeddings for document '%s' (preserving indexed status) [job_id=%s]", doc_uuid, job_id)
+        async with async_session() as update_session:
+            result = await update_session.execute(select(Document).where(Document.id == doc_uuid))
+            doc_obj = result.scalar_one_or_none()
+            if doc_obj and doc_obj.status != "indexed":
+                doc_obj.status = "indexed"
+                doc_obj.processing_error = None
+                await update_session.commit()
+        return {
+            "status": "indexed",
+            "document_id": str(doc_uuid),
+            "total_chunks": len(persisted_chunks),
+            "embedded_chunks": len(persisted_chunks),
+            "duration_seconds": round(time.perf_counter() - start_time, 4),
+        }
+
+    # Step 3: Generate Gemini Embeddings (NO DB Transaction Open - Rule A)
+    embedding_service = EmbeddingService()
+    try:
+        paired_embeddings = await embedding_service.embed_chunks(persisted_chunks)
+    except Exception as exc:
+        logger.exception("Failed during Gemini embedding generation for document '%s' in job [%s]: %s", doc_uuid, job_id, exc)
+        await embedding_service.close()
+        # Safe failure recording transaction
+        async with async_session() as err_session:
+            result = await err_session.execute(select(Document).where(Document.id == doc_uuid))
+            doc_to_fail = result.scalar_one_or_none()
+            if doc_to_fail:
+                doc_to_fail.status = "failed"
+                # Strip out any possible secrets
+                safe_err = str(exc).replace(settings.GEMINI_API_KEY, "[REDACTED]") if settings.GEMINI_API_KEY else str(exc)
+                doc_to_fail.processing_error = safe_err[:500]
+                await err_session.commit()
+        raise
+    finally:
+        await embedding_service.close()
+
+    # Step 4: Atomic DB Persistence Transaction (Rule B & Rule 17)
+    async with async_session() as persist_session:
+        try:
+            # Map chunk_id to embedding vector
+            vec_map = {chunk_id: vector for chunk_id, vector in paired_embeddings}
+            for chunk_obj in persisted_chunks:
+                vec = vec_map.get(chunk_obj.id)
+                if vec is None or len(vec) != settings.EMBEDDING_DIMENSIONS:
+                    raise ProcessingError(f"Missing or invalid vector for chunk {chunk_obj.id}")
+                
+                # Update chunk record
+                res = await persist_session.execute(select(Chunk).where(Chunk.id == chunk_obj.id))
+                db_chunk = res.scalar_one()
+                db_chunk.embedding = vec
+
+            # Update document record
+            doc_res = await persist_session.execute(select(Document).where(Document.id == doc_uuid))
+            doc_to_index = doc_res.scalar_one()
+            doc_to_index.status = "indexed"
+            doc_to_index.processing_error = None
+            await persist_session.commit()
+
+        except Exception as exc:
+            await persist_session.rollback()
+            logger.exception("Failed during embedding persistence for document '%s' in job [%s]: %s", doc_uuid, job_id, exc)
+
+            async with async_session() as err_session:
+                result = await err_session.execute(select(Document).where(Document.id == doc_uuid))
+                doc_to_fail = result.scalar_one_or_none()
+                if doc_to_fail:
+                    doc_to_fail.status = "failed"
+                    doc_to_fail.processing_error = str(exc)[:500]
+                    await err_session.commit()
+            raise
+
+    duration = time.perf_counter() - start_time
+    logger.info(
+        "Successfully indexed document '%s' (%d chunks, 1536-dim embeddings generated) in %.4fs [job_id=%s]",
+        doc_uuid,
+        len(persisted_chunks),
+        duration,
+        job_id,
+    )
+
+    return {
+        "status": "indexed",
+        "document_id": str(doc_uuid),
+        "filename": document.filename if 'document' in locals() and document else "",
+        "file_type": document.file_type if 'document' in locals() and document else "",
+        "total_pages": document.total_pages if 'document' in locals() and document else None,
+        "total_chunks": len(persisted_chunks),
+        "embedded_chunks": len(paired_embeddings),
+        "duration_seconds": round(duration, 4),
+    }
 
 
 async def health_check_task(ctx: dict[str, Any], message: str) -> dict[str, Any]:
