@@ -284,44 +284,51 @@ flowchart TD
 
 ---
 
-### Phase 7 — Vector Similarity Search & Index Optimization
-* **Goal:** Implement high-performance vector retrieval with HNSW indexing and metadata filtering.
-* **Why Needed:** Efficient and accurate chunk retrieval is the foundation of the RAG pipeline.
-* **Current Status:** Not Implemented.
+### Phase 7 — Grounded RAG Context Assembly & Answer Generation (Sprint 7.1)
+* **Goal:** Build the single-turn grounded RAG question-answering pipeline using pgvector retrieval and Gemini 2.0 Flash generation.
+* **Why Needed:** Enable users to ask natural-language financial research questions and receive grounded answers backed by structured citations directly referencing indexed text and financial table chunks.
+* **Current Status:** **COMPLETED & VERIFIED (Sprint 7.1)**
 * **Tasks:**
-  - [ ] Create HNSW vector index migration on `chunks.embedding` using cosine distance (`vector_cosine_ops`):
-    ```sql
-    CREATE INDEX idx_chunks_embedding_hnsw ON chunks USING hnsw (embedding vector_cosine_ops);
-    ```
-  - [ ] Implement vector search query service in `RetrieverService` (`app/services/retriever.py`):
-    - Cosine similarity query using SQLAlchemy pgvector operator (`Chunk.embedding.cosine_distance(query_embedding)`).
-    - Top-k retrieval with similarity threshold score filtering.
-    - Metadata filtering (by `document_id`, `chunk_type`, or `page_number`).
-* **Files Likely Affected:**
-  - `backend/alembic/versions/`
-  - `backend/app/services/retriever.py`
+  - [x] Implement `GenerationService` with async `google-genai` SDK, system instructions, and deterministic `FakeGenAIClient` for offline testing (`backend/app/services/generation_service.py`).
+  - [x] Implement structured data contracts `SourceCitation` and `RAGResponse` (`backend/app/services/rag_service.py`).
+  - [x] Implement atomic context assembly with source numbering (`[SOURCE N]`) and 18,000 character limit without splitting chunks.
+  - [x] Implement `RAGService.answer()` with input validation, similarity filtering, and insufficient evidence short-circuiting.
+  - [x] Implement citation validation and sanitization for out-of-bounds citation markers.
+  - [x] Define Pydantic request/response schemas (`backend/app/schemas/rag.py`).
+  - [x] Expose `POST /api/v1/rag/query` endpoint with AsyncSession database dependency (`backend/app/api/routes/rag.py`).
+  - [x] Add comprehensive unit and API test suite with 30 test cases (`backend/tests/test_rag_service.py`).
+  - [x] Add Scenario 6 E2E integration test querying multi-page financial statements in Docker (`backend/tests/e2e_test.py`).
+  - [x] Create comprehensive developer documentation (`docs/development/rag.md`).
+* **Files Affected:**
+  - `backend/app/core/config.py`
+  - `backend/app/services/generation_service.py`
+  - `backend/app/services/rag_service.py`
+  - `backend/app/schemas/rag.py`
+  - `backend/app/api/routes/rag.py`
+  - `backend/app/main.py`
+  - `backend/tests/test_rag_service.py`
+  - `backend/tests/e2e_test.py`
+  - `docs/development/rag.md`
+  - `plan.md`
 * **Acceptance Criteria:**
-  - Given a query vector, the system retrieves the top-k most relevant chunks within <50ms with correct distance scores.
+  - `POST /api/v1/rag/query` answers financial questions with accurate context and citations.
+  - Returns `grounded: false` without LLM calls when evidence is below relevance threshold.
+  - All 146 backend tests and all 6 Docker E2E scenarios pass cleanly.
 
 ---
 
-### Phase 8 — Grounded RAG Query Pipeline
-* **Goal:** Build an end-to-end question answering pipeline that generates verifiable, citation-backed answers.
-* **Why Needed:** Financial analysts require factually accurate answers citing exact document sections and pages.
+### Phase 8 — Vector Index Optimization (HNSW) & Multi-Turn / Agent Foundation
+* **Goal:** Optimize vector retrieval performance using HNSW indexing and prepare foundation for multi-turn conversations and multi-agent synthesis.
+* **Why Needed:** Enhance vector retrieval scale and support iterative financial analysis workflows.
 * **Current Status:** Not Implemented.
 * **Tasks:**
-  - [ ] Implement `RAGService` (`app/services/rag_service.py`):
-    - Query embedding generation.
-    - Semantic context retrieval.
-    - Strict financial prompt engineering (demanding strict grounding, disallowing speculation, formatting citations).
-    - LLM invocation with OpenAI `gpt-4o` / `gpt-4o-mini`.
-  - [ ] Parse and format citations in responses: e.g., `[Doc: Tesla_2023_10K.pdf, Page: 42, Chunk: 12]`.
-  - [ ] Implement response fallback when confidence is low or information is not present in the indexed documents.
+  - [ ] Create HNSW vector index migration on `chunks.embedding` using cosine distance (`vector_cosine_ops`).
+  - [ ] Support conversation session management and multi-turn context synthesis.
 * **Files Likely Affected:**
-  - `backend/app/services/rag_service.py`
-  - `backend/app/schemas/query.py`
+  - `backend/alembic/versions/`
+  - `backend/app/services/retrieval_service.py`
 * **Acceptance Criteria:**
-  - Querying "What was the total revenue in 2023?" returns the exact metric accompanied by source document and page citations.
+  - Sub-50ms vector retrieval over large chunk datasets with HNSW index.
 
 ---
 

@@ -62,6 +62,32 @@ class FakeGenAIClient:
 
             return FakeResponse(embeddings)
 
+        async def generate_content(
+            self,
+            model: str,
+            contents: Any,
+            config: Any = None,
+        ) -> Any:
+            self.parent.call_count += 1
+            if self.parent.force_error:
+                raise self.parent.force_error
+
+            # Default deterministic response referencing source identifiers if present in contents
+            prompt_str = str(contents)
+            answer_text = "Based on the provided financial statements, revenue increased to $1,000 million in 2025 compared to $900 million in 2024. [SOURCE 1]"
+            if "balance sheet" in prompt_str.lower():
+                answer_text = "As of December 31, 2025, total assets were $1,500 million and total liabilities were $600 million. [SOURCE 1]"
+            elif "cash flow" in prompt_str.lower():
+                answer_text = "Net cash provided by operating activities was $300 million in 2025. [SOURCE 1]"
+            elif "[SOURCE 1]" not in prompt_str:
+                answer_text = "I could not find enough relevant information in the indexed documents to answer this question."
+
+            class FakeGenResponse:
+                def __init__(self, text: str):
+                    self.text = text
+
+            return FakeGenResponse(answer_text)
+
     @property
     def models(self) -> Models:
         return self.Models(self)

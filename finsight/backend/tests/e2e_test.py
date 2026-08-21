@@ -184,6 +184,20 @@ def search_retrieval(query: str, top_k: int = 5, min_similarity: float = 0.0, do
         return json.loads(resp.read().decode("utf-8"))
 
 
+def query_rag(query: str, top_k: int = 5, min_similarity: float = 0.30, document_id: str | None = None) -> dict:
+    payload = {
+        "query": query,
+        "top_k": top_k,
+        "min_similarity": min_similarity,
+        "document_id": document_id,
+    }
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request("http://127.0.0.1:8000/api/v1/rag/query", data=body)
+    req.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
 def run_e2e_tests():
     print("==================================================")
     print("STARTING E2E INTEGRATION & PIPELINE VERIFICATION")
@@ -334,6 +348,36 @@ def run_e2e_tests():
 
     print("  ✅ E2E 5 PASSED: In-database pgvector similarity search, descending ordering, and metadata preservation verified.")
 
+    # 6. Grounded RAG Question Answering (Sprint 7.1 Verification)
+    print("\n[E2E 6] Executing Grounded RAG Question Answering against indexed Financial PDF...")
+    rag_queries = [
+        "What was the total revenue in 2025?",
+        "What were total assets on the balance sheet?",
+        "What was net cash provided by operating activities?",
+    ]
+
+    for rq in rag_queries:
+        rag_res = query_rag(query=rq, top_k=5, min_similarity=0.30, document_id=fin_id)
+        assert rag_res["query"] == rq, f"Query mismatch: expected '{rq}', got '{rag_res['query']}'"
+        assert rag_res["grounded"] is True, f"Expected grounded=True for relevant query '{rq}'"
+        assert len(rag_res["answer"]) > 0, f"Expected non-empty answer for query '{rq}'"
+        assert len(rag_res["citations"]) > 0, f"Expected citations for query '{rq}'"
+        assert rag_res["retrieved_chunks"] >= 1
+        
+        for cit in rag_res["citations"]:
+            assert cit["chunk_id"] is not None
+            assert cit["document_id"] == fin_id
+            assert cit["page_number"] is not None
+            assert cit["chunk_type"] in ("text", "table")
+            assert 0.0 <= cit["similarity"] <= 1.0
+            if cit["chunk_type"] == "table":
+                assert cit["statement_type"] in ("income_statement", "balance_sheet", "cash_flow", None)
+                assert isinstance(cit["fiscal_periods"], list)
+
+        print(f"  -> RAG query '{rq}': grounded answer generated with {len(rag_res['citations'])} citations (top citation page: {rag_res['citations'][0]['page_number']}, statement: {rag_res['citations'][0]['statement_type']})")
+
+    print("  ✅ E2E 6 PASSED: Grounded RAG answer generation, context assembly, and structured citation verification passed.")
+
     print("\n==================================================")
     print("ALL END-TO-END TESTS PASSED SUCCESSFULLY! 🎉")
     print("==================================================")
@@ -341,4 +385,5 @@ def run_e2e_tests():
 
 if __name__ == "__main__":
     run_e2e_tests()
+
 

@@ -37,6 +37,20 @@ class Settings(BaseSettings):
     RETRIEVAL_MAX_TOP_K: int = 20
     RETRIEVAL_MIN_SIMILARITY: float = 0.0
 
+    # RAG Configuration
+    RAG_DEFAULT_TOP_K: int = 5
+    RAG_MAX_TOP_K: int = 20
+    RAG_MAX_CONTEXT_CHARS: int = 18000
+    RAG_MIN_RELEVANCE_SCORE: float = 0.30
+
+    # Gemini Generation Configuration
+    GEMINI_GENERATION_PROVIDER: str = "gemini"  # "gemini" or "fake" (for testing)
+    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_MAX_OUTPUT_TOKENS: int = 1200
+    GEMINI_TEMPERATURE: float = 0.1
+    GEMINI_MAX_RETRIES: int = 3
+    GEMINI_GENERATION_TIMEOUT_SECONDS: float = 60.0
+
     # File Storage
     STORAGE_PATH: Path = Path("/app/storage")
     MAX_FILE_SIZE: int = 50 * 1024 * 1024  # 50MB in bytes
