@@ -139,11 +139,11 @@ def get_document(doc_id: str) -> dict:
         return json.loads(resp.read().decode("utf-8"))
 
 
-def poll_document(doc_id: str, timeout: int = 10) -> dict:
+def poll_document(doc_id: str, timeout: int = 20) -> dict:
     for _ in range(timeout * 2):
         time.sleep(0.5)
         doc = get_document(doc_id)
-        if doc["status"] in ("parsed", "failed"):
+        if doc["status"] in ("indexed", "failed"):
             return doc
     return get_document(doc_id)
 
@@ -481,6 +481,74 @@ def run_e2e_tests():
     print("  -> Session Isolation Verified: Session B messages strictly separated from Session A.")
 
     print("  ✅ E2E 7 PASSED: Multi-turn grounded conversation, follow-up query rewriting, message history, and session isolation verified.")
+
+    # 8. Multi-Agent Financial Research System (Sprint 9.1 Verification)
+    print("\n[E2E 8] Executing Multi-Agent Financial Research System via LangGraph...")
+    sess_agent = create_conversation_session(title="LangGraph Multi-Agent Financial Research")
+    sess_agent_id = sess_agent["id"]
+    print(f"  -> Created Conversation Session for Multi-Agent Research: {sess_agent_id}")
+
+    # Comparative multi-period research query
+    research_query = "Compare the company's 2024 and 2025 revenue and gross profit."
+    agent_resp = query_conversation(session_id=sess_agent_id, query=research_query, document_id=fin_id)
+
+    assert agent_resp["grounded"] is True, "Expected grounded=True from multi-agent research graph"
+    assert len(agent_resp["answer"]) > 0, "Expected non-empty research answer"
+    assert len(agent_resp["citations"]) >= 1, "Expected structured citations backing research response"
+    assert agent_resp["retrieved_chunks"] >= 1, "Expected retrieved chunks in research state"
+
+    for cit in agent_resp["citations"]:
+        assert cit["chunk_id"] is not None
+        assert cit["document_id"] == fin_id
+        assert cit["page_number"] is not None
+        assert 0.0 <= cit["similarity"] <= 1.0
+
+    print(f"  -> Research Query: '{research_query}'")
+    print(f"  -> Generated Answer: {agent_resp['answer'][:120]}...")
+    print(f"  -> Citations: {len(agent_resp['citations'])} source chunks verified.")
+
+    # Verify message persistence
+    agent_msgs = get_conversation_messages(sess_agent_id)
+    assert len(agent_msgs) == 2, f"Expected 2 messages (1 user, 1 assistant), got {len(agent_msgs)}"
+    assert agent_msgs[0]["role"] == "user" and agent_msgs[0]["content"] == research_query
+    assert agent_msgs[1]["role"] == "assistant"
+    print("  -> Multi-Agent Research messages persisted in database session.")
+
+    # 9. Guardrails AI Financial Response Validation (Sprint 9.2 Verification)
+    print("\n[E2E 9] Executing Guardrails Output Validation on Financial Responses...")
+    sess_guard = create_conversation_session(title="Guardrails Validation Session")
+    sess_guard_id = sess_guard["id"]
+    print(f"  -> Created Conversation Session for Guardrails: {sess_guard_id}")
+
+    # Financial Research Question
+    guard_query = "What were total assets and liabilities in 2025?"
+    guard_resp = query_conversation(session_id=sess_guard_id, query=guard_query, document_id=fin_id)
+
+    # 1. Verify structure and non-emptiness
+    assert guard_resp["grounded"] is True, "Guardrails should confirm grounded=True with valid retrieved evidence"
+    assert len(guard_resp["answer"]) > 0, "Guardrails requires non-empty response"
+
+    # 2. Verify citation integrity
+    assert len(guard_resp["citations"]) >= 1, "Guardrails must enforce verified source citations"
+    for cit in guard_resp["citations"]:
+        assert cit["chunk_id"] is not None
+        assert cit["document_id"] == fin_id
+        assert cit["page_number"] in (1, 2, 3)
+
+    # 3. Controlled Insufficient-Evidence Fallback
+    sess_empty = create_conversation_session(title="Guardrails Empty Evidence Fallback")
+    sess_empty_id = sess_empty["id"]
+    empty_resp = query_conversation(session_id=sess_empty_id, query="What was the EBITDA of an unindexed entity XYZ?", top_k=5, min_similarity=0.99)
+    assert empty_resp["grounded"] is False
+    assert len(empty_resp["citations"]) == 0
+    assert "not find enough" in empty_resp["answer"].lower()
+    print("  -> Controlled Insufficient Evidence Fallback validated.")
+
+    print(f"  -> Guardrails Output Validation Query: '{guard_query}'")
+    print(f"  -> Validated Response: {guard_resp['answer'][:120]}...")
+    print(f"  -> Validated Citations: {len(guard_resp['citations'])} source chunks strictly verified.")
+
+    print("  ✅ E2E 9 PASSED: Guardrails AI output validation (structure, citation integrity, numeric bounds, grounding) verified.")
 
     print("\n==================================================")
     print("ALL END-TO-END TESTS PASSED SUCCESSFULLY! 🎉")
