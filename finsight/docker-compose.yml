@@ -41,7 +41,25 @@ services:
     env_file:
       - .env
     ports:
-      - "8000:8000"
+      - "8085:8000"
+    volumes:
+      - ./backend:/app
+      - ./backend/storage:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: finsight_worker
+    restart: unless-stopped
+    command: ["arq", "app.worker.WorkerSettings"]
+    env_file:
+      - .env
     volumes:
       - ./backend:/app
       - ./backend/storage:/app/storage

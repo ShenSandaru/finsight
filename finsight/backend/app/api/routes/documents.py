@@ -1,12 +1,16 @@
 import uuid
+import logging
 
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.tasks import enqueue_task
+from app.core.exceptions import DocumentNotFoundError, ExternalServiceError
 from app.services.document_service import DocumentService
 from app.schemas.document import DocumentResponse, DocumentUploadResponse, DocumentListResponse
 
+logger = logging.getLogger("finsight.api.documents")
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
 
@@ -25,7 +29,7 @@ async def upload_document(
     """
     Upload a new document (PDF, TXT, or CSV).
 
-    The document will be saved and queued for processing.
+    The document will be saved, committed, and queued for background processing.
     """
     service = DocumentService(db)
     document = await service.upload_document(
@@ -34,6 +38,19 @@ async def upload_document(
         description=description,
         source=source,
     )
+
+    # Explicitly commit DB transaction before enqueueing task to prevent worker race conditions
+    await db.commit()
+
+    # Enqueue background ingestion job
+    try:
+        await enqueue_task("process_document", str(document.id))
+    except Exception as exc:
+        logger.error("Failed to enqueue ingestion task for document '%s': %s", document.id, exc)
+        raise ExternalServiceError(
+            message="Document saved, but failed to enqueue background processing task",
+            details={"document_id": str(document.id), "error": str(exc)},
+        ) from exc
 
     return DocumentUploadResponse(
         message="Document uploaded successfully",
@@ -75,9 +92,9 @@ async def get_document(
     document = await service.get_document(document_id)
 
     if not document:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found",
+        raise DocumentNotFoundError(
+            message=f"Document with ID '{document_id}' not found",
+            details={"document_id": str(document_id)}
         )
 
     return DocumentResponse.model_validate(document)
@@ -98,9 +115,9 @@ async def delete_document(
     deleted = await service.delete_document(document_id)
 
     if not deleted:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found",
+        raise DocumentNotFoundError(
+            message=f"Document with ID '{document_id}' not found",
+            details={"document_id": str(document_id)}
         )
 
     return None

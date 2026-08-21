@@ -15,6 +15,7 @@ class DocumentResponse(BaseModel):
     description: str | None = None
     source: str | None = None
     status: str
+    processing_error: str | None = None
     total_pages: int | None = None
     total_chunks: int | None = None
     created_at: datetime
