@@ -247,6 +247,35 @@ def query_conversation(session_id: str, query: str, top_k: int = 5, min_similari
         return json.loads(resp.read().decode("utf-8"))
 
 
+def create_report(query: str, title: str | None = None, document_ids: list[str] | None = None) -> dict:
+    payload = {
+        "query": query,
+        "title": title,
+        "document_ids": document_ids,
+        "report_type": "financial_research",
+    }
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request("http://127.0.0.1:8000/api/v1/reports", data=body)
+    req.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def get_report(report_id: str) -> dict:
+    req = urllib.request.Request(f"http://127.0.0.1:8000/api/v1/reports/{report_id}")
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def poll_report(report_id: str, timeout: int = 25) -> dict:
+    for _ in range(timeout * 2):
+        time.sleep(0.5)
+        rep = get_report(report_id)
+        if rep["status"] in ("completed", "failed"):
+            return rep
+    return get_report(report_id)
+
+
 def run_e2e_tests():
     print("==================================================")
     print("STARTING E2E INTEGRATION & PIPELINE VERIFICATION")
@@ -647,6 +676,40 @@ def run_e2e_tests():
     print(f"  -> Citations: {len(comp_resp['citations'])} source chunks verified across {len(retrieved_citation_doc_ids)} documents.")
 
     print("  ✅ E2E 12 PASSED: Multi-Document & Cross-Company Comparison (metric isolation, comparative difference, multi-doc citations) verified.")
+
+    # 13. Structured Financial Research Report Pipeline (Sprint 10.4 Verification)
+    print("\n[E2E 13] Executing Asynchronous Structured Financial Research Report Pipeline...")
+    rep_query = "Generate a comprehensive financial research report comparing 2025 revenue and gross profit between Document A and Document B."
+    rep_create_resp = create_report(
+        query=rep_query,
+        title="Apple vs Microsoft 2025 Comparative Research Report",
+        document_ids=[fin_id, doc_b_id],
+    )
+    rep_id = rep_create_resp["id"]
+    print(f"  -> Submitted Report Request. Initial status: {rep_create_resp['status']} (id={rep_id})")
+    assert rep_create_resp["status"] == "pending", f"Expected initial status 'pending', got {rep_create_resp['status']}"
+
+    # Poll until completed by ARQ worker
+    rep_completed = poll_report(rep_id, timeout=30)
+    print(f"  -> Final Report Status: {rep_completed['status']}, Error: {rep_completed.get('error_message')}")
+    assert rep_completed["status"] == "completed", f"Expected 'completed', got {rep_completed['status']}"
+    assert rep_completed["content"] is not None, "Report content must be populated"
+    assert len(rep_completed["content"]) > 100, "Report markdown content must be non-empty"
+    assert "## 1. Executive Summary" in rep_completed["content"]
+    assert "## 5. Source Evidence & Citations" in rep_completed["content"]
+
+    # Verify structured citations
+    citations = rep_completed.get("citations") or []
+    assert len(citations) >= 1, "Report must contain verified source citations"
+    for cit in citations:
+        assert cit["chunk_id"] is not None
+        assert cit["document_id"] in [fin_id, doc_b_id]
+
+    print(f"  -> Executive Summary: {rep_completed['executive_summary'][:120]}...")
+    print(f"  -> Formatted Markdown Report Size: {len(rep_completed['content'])} characters")
+    print(f"  -> Structured Citations: {len(citations)} source citations verified.")
+
+    print("  ✅ E2E 13 PASSED: Asynchronous Structured Financial Research Report (Worker execution, DAG reuse, Markdown compilation, Guardrails validation) verified.")
 
     print("\n==================================================")
     print("ALL END-TO-END TESTS PASSED SUCCESSFULLY! 🎉")

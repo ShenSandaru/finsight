@@ -12,8 +12,10 @@ FinSight enables automated financial research, multi-turn conversational analysi
 3. **Table-Aware Chunking:** Chunks text and tables while preserving structured Markdown representations and JSONB metadata.
 4. **Vector Embedding & HNSW Indexing:** Converts chunks into 1536-dimensional vectors using Google Gemini (`gemini-embedding-2`) and indexes them in PostgreSQL with pgvector HNSW cosine search.
 5. **Conversational Memory & Query Rewriting:** Manages isolated conversation sessions and deterministically rewrites pronoun-dependent follow-up queries.
-6. **LangGraph Multi-Agent Research:** Orchestrates a 5-node DAG (`Planner -> Retriever -> Financial Analyzer -> Citation Auditor -> Synthesis`) calculating financial ratios deterministically.
-7. **Deterministic Output Validation (Guardrails):** Enforces Pydantic v2 runtime constraints, validating output structure, citation provenance, numerical bounds, and grounding guarantees before client delivery.
+6. **LangGraph Multi-Agent Research:** Orchestrates a 5-node DAG (`Planner -> Retriever -> Financial Analyzer -> Citation Auditor -> Synthesis`) calculating financial ratios determinist17. **Deterministic Output Validation (Guardrails):** Enforces Pydantic v2 runtime constraints, validating output structure, citation provenance, numerical bounds, and grounding guarantees before client delivery.
+18. **Extended Financial Metrics & Multi-Period Analysis:** Deterministically calculates Operating Margin, ROA, Current Ratio, Debt-to-Equity, Free Cash Flow, sequential YoY growth, and multi-year CAGR with trend classifications.
+19. **Multi-Document & Cross-Company Comparison:** Scopes vector retrieval and metric isolation across multiple corporate filings with deterministic variance analysis.
+20. **Asynchronous Structured Research Reports:** Generates exportable, publication-ready GitHub Flavored Markdown research reports via ARQ background workers with full source provenance.
 
 ## 🛠️ Technologies Used
 
@@ -32,12 +34,13 @@ FinSight enables automated financial research, multi-turn conversational analysi
 finsight/
 ├── backend/                  # Core API and AI logic
 │   ├── app/
-│   │   ├── agents/           # AI interaction agents
-│   │   ├── api/routes/       # API definition (e.g., documents.py)
-│   │   ├── core/             # DB config, environment vars
-│   │   ├── models/           # DB tables (document, chunk, report)
+│   │   ├── agents/           # LangGraph multi-agent nodes & graph
+│   │   ├── api/routes/       # API endpoints (documents, search, rag, conversations, reports)
+│   │   ├── core/             # DB config, environment vars, tasks
+│   │   ├── guardrails/       # Deterministic safety & citation validators
+│   │   ├── models/           # DB tables (document, chunk, conversation, report)
 │   │   ├── schemas/          # Pydantic validation models
-│   │   └── services/         # Business logic (document processing)
+│   │   └── services/         # Business logic (retrieval, generation, conversation, report)
 │   ├── storage/              # Local storage for raw uploaded files
 │   ├── Dockerfile            # Backend container configuration
 │   └── requirements.txt      # Python dependencies
@@ -100,10 +103,10 @@ Once the application is running via Docker Compose, the services will be availab
 ### Running Automated Tests
 
 ```bash
-# Run full Pytest regression suite (222 tests)
+# Run full Pytest regression suite (235 tests)
 docker compose exec backend pytest -v
 
-# Run full Docker End-to-End Pipeline (9 Scenarios)
+# Run full Docker End-to-End Pipeline (13 Scenarios)
 docker compose exec backend python tests/e2e_test.py
 ```
 
@@ -121,10 +124,16 @@ docker compose exec backend python tests/e2e_test.py
 | **Phase 8** | HNSW Vector Optimization & Conversational Memory | ✅ Complete |
 | **Phase 9.1** | LangGraph Multi-Agent Financial Research | ✅ Complete |
 | **Phase 9.2** | Deterministic AI Output Validation (Guardrails) | ✅ Complete |
-| **Phase 10** | Advanced Financial Research & Reports | 🔄 Planned / Next |
+| **Phase 10.1** | Extended Financial Metrics & Ratio Library | ✅ Complete |
+| **Phase 10.2** | Multi-Period Sequencing & CAGR Trend Analysis | ✅ Complete |
+| **Phase 10.3** | Multi-Document & Cross-Company Comparison | ✅ Complete |
+| **Phase 10.4** | Structured Research Reports & REST Endpoints | ✅ Complete |
+| **Phase 10.5** | Financial Evaluation & Benchmark Suite | 🔄 Planned / Next |
 | **Phase 11** | Frontend Web Application (React / Next.js) | 🔄 Planned |
 
 **Verification Status:**
-* **222 Pytest unit & integration tests passing** (100% pass rate).
+* **235 Pytest unit & integration tests passing** (100% pass rate).
+* **13/13 Docker E2E pipeline scenarios passing**.
+* **System Audit Status:** `PRODUCTION-READY FOUNDATION`.**222 Pytest unit & integration tests passing** (100% pass rate).
 * **9/9 Docker E2E pipeline scenarios passing**.
 * **System Audit Status:** `PRODUCTION-READY FOUNDATION`.

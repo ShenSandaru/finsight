@@ -408,7 +408,7 @@ flowchart TD
 ### Phase 10 — Advanced Financial Research Capabilities & Report Endpoints
 * **Goal:** Extend research capabilities with cross-company filing comparisons, deep financial ratio analysis, and asynchronous long-form research report endpoints.
 * **Why Needed:** Enable analysts to run deep comparative financial research across multiple documents and export structured reports.
-* **Current Status:** **Sprint 10.1, 10.2 & 10.3 COMPLETE & VERIFIED (Extended Metrics, Time-Series/CAGR, Cross-Document Comparison)**.
+* **Current Status:** **Sprint 10.1, 10.2, 10.3 & 10.4 COMPLETE & VERIFIED (Extended Metrics, Time-Series/CAGR, Cross-Document Comparison, Structured Research Reports)**.
 * **Tasks:**
   - [x] Extend `FinancialAnalyzerNode` (`backend/app/agents/financial_analyzer.py`) with deterministic metric extraction and ratio calculations (Sprint 10.1):
     - [x] Operating Margin: `(operating_income / revenue) * 100` (`%`)
@@ -432,32 +432,32 @@ flowchart TD
     - [x] Deterministic cross-document absolute difference ($\text{Doc B} - \text{Doc A}$) and percentage difference ($((\text{Doc B} - \text{Doc A}) / |\text{Doc A}|) \times 100$).
     - [x] Merged dual provenance (`source_chunk_ids` containing evidence from both compared filings).
     - [x] Citation auditing and deterministic Guardrails output validation across multi-document responses.
-  - [x] Unit and edge-case test suite passing (229 total pytest tests, 100% pass rate) (Sprint 10.1, 10.2 & 10.3).
-  - [x] Docker E2E test suite updated with Scenario 12 (Multi-Document & Cross-Company Comparison) passing (12/12 E2E scenarios) (Sprint 10.3).
-  - [x] Create developer documentation in `docs/development/financial-metrics.md`, `docs/development/trend-analysis.md`, and `docs/development/cross-document-comparison.md`.
-  - [ ] Structured Financial Research Reports & REST Endpoints (Sprint 10.4).
+  - [x] Structured Financial Research Reports & REST Endpoints (Sprint 10.4):
+    - [x] Database migration `0005_enhance_reports_schema.py` and model update `app/models/report.py` (`document_ids`, `executive_summary`, `findings`, `content`, `citations`, `error_message`, `updated_at`).
+    - [x] Pydantic schemas in `backend/app/schemas/report.py` (`CreateReportRequest`, `ReportResponse`, `ReportListResponse`).
+    - [x] `ReportService` (`backend/app/services/report_service.py`) for deterministic publication-ready GitHub Flavored Markdown report compilation.
+    - [x] Background ARQ task `generate_financial_report` in `app/tasks/definitions.py` reusing verified `FinancialResearchService.execute_research()` DAG and `ResponseGuard`.
+    - [x] Worker registration in `app/worker.py` and REST API endpoints in `app/api/routes/reports.py` (`POST /reports`, `GET /reports/{id}`, `GET /reports`, `DELETE /reports/{id}`).
+  - [x] Unit and integration test suite passing (235 total pytest tests, 100% pass rate) (Sprint 10.1, 10.2, 10.3 & 10.4).
+  - [x] Docker E2E test suite updated with Scenario 13 (Asynchronous Structured Financial Research Report Pipeline) passing (13/13 E2E scenarios) (Sprint 10.4).
+  - [x] Developer documentation in `docs/development/financial-metrics.md`, `docs/development/trend-analysis.md`, `docs/development/cross-document-comparison.md`, and `docs/development/research-reports.md`.
   - [ ] Financial Evaluation & Benchmark Suite (Sprint 10.5).
 * **Files Affected:**
-  - `backend/app/services/retrieval_service.py`
-  - `backend/app/schemas/search.py`
-  - `backend/app/schemas/rag.py`
-  - `backend/app/schemas/conversation.py`
-  - `backend/app/agents/state.py`
-  - `backend/app/agents/retriever.py`
-  - `backend/app/agents/graph.py`
-  - `backend/app/services/rag_service.py`
-  - `backend/app/services/conversation_service.py`
-  - `backend/app/api/routes/search.py`
-  - `backend/app/api/routes/rag.py`
-  - `backend/app/api/routes/conversations.py`
-  - `backend/app/agents/financial_analyzer.py`
-  - `backend/tests/test_retrieval_service.py`
-  - `backend/tests/test_agent_system.py`
+  - `backend/app/models/report.py`
+  - `backend/alembic/versions/0005_enhance_reports_schema.py`
+  - `backend/app/schemas/report.py`
+  - `backend/app/services/report_service.py`
+  - `backend/app/tasks/definitions.py`
+  - `backend/app/worker.py`
+  - `backend/app/api/routes/reports.py`
+  - `backend/app/main.py`
+  - `backend/tests/test_report_service.py`
   - `backend/tests/e2e_test.py`
-  - `docs/development/cross-document-comparison.md`
+  - `docs/development/research-reports.md`
+  - `README.md`
   - `plan.md`
 * **Acceptance Criteria:**
-  - Multi-document retrieval strictly filters chunks by selected document IDs; metrics from different documents remain completely isolated without cross-contamination; deterministic comparative differences calculate in Python; multi-document citations validate through CitationAuditor and Guardrails; 229 backend tests and 12 Docker E2E scenarios pass cleanly.
+  - Clients can submit asynchronous report requests via REST API; ARQ workers process jobs by executing the verified multi-agent research DAG without code duplication; structured Markdown reports format with executive summaries, metrics tables, CAGR analysis, cross-doc comparisons, and citations; Guardrails validation passes before status becomes 'completed'; 235 backend tests and 13 Docker E2E scenarios pass cleanly.
 
 ---
 
