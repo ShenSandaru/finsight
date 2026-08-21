@@ -24,7 +24,7 @@ class MockRetrievalService:
         self.sample_results = sample_results or []
         self.searched_queries = []
 
-    async def search(self, query: str, top_k: int = 5, min_similarity: float = 0.0, document_id=None, db=None) -> list[RetrievalResult]:
+    async def search(self, query: str, top_k: int = 5, min_similarity: float = 0.0, document_id=None, document_ids=None, db=None) -> list[RetrievalResult]:
         self.searched_queries.append(query)
         return self.sample_results
 
@@ -238,6 +238,414 @@ class TestFinancialAnalyzerNode:
         if gm_2025:
             assert gm_2025[0].value == 40.0
             assert gm_2025[0].unit == "%"
+
+    async def test_05b_extended_financial_metrics_calculations(self):
+        """Sprint 10.1: Test Operating Margin, ROA, Current Ratio, Debt-to-Equity, and Free Cash Flow."""
+        chunk_id = uuid.uuid4()
+        chunk_content = (
+            "Consolidated Financial Statements\n"
+            "Year Ended December 31, 2025\n"
+            "Total Revenue: $1,000\n"
+            "Operating Income: $300\n"
+            "Net Income: $150\n"
+            "Total Current Assets: $600\n"
+            "Total Current Liabilities: $300\n"
+            "Total Assets: $1,500\n"
+            "Total Liabilities: $600\n"
+            "Total Stockholders' Equity: $900\n"
+            "Operating Cash Flow: $400\n"
+            "Capital Expenditures: $150"
+        )
+        r = RetrievalResult(
+            chunk_id=chunk_id,
+            document_id=uuid.uuid4(),
+            content=chunk_content,
+            chunk_type="table",
+            chunk_index=0,
+            page_number=1,
+            similarity=0.95,
+            metadata={"statement_type": "income_statement"},
+        )
+
+        state: ResearchState = {
+            "original_query": "Calculate all financial ratios for 2025",
+            "standalone_query": "Calculate all financial ratios for 2025",
+            "sub_queries": [],
+            "retrieved_chunks": [r],
+            "session_id": None,
+            "document_id": None,
+            "top_k": 5,
+            "min_similarity": 0.0,
+            "findings": [],
+            "citation_audit": None,
+            "guardrails_validation": None,
+            "final_answer": None,
+            "citations": [],
+            "grounded": False,
+            "step_count": 2,
+            "status": "retrieved",
+            "error": None,
+        }
+
+        res = await FinancialAnalyzerNode.analyze(state)
+        findings = res["findings"]
+
+        # 1. Operating Margin: (300 / 1000) * 100 = 30.0%
+        op_margin = [f for f in findings if f.metric == "operating_margin" and f.period == "2025"][0]
+        assert op_margin.value == 30.0
+        assert op_margin.unit == "%"
+        assert chunk_id in op_margin.source_chunk_ids
+
+        # 2. Return on Assets (ROA): (150 / 1500) * 100 = 10.0%
+        roa = [f for f in findings if f.metric == "roa" and f.period == "2025"][0]
+        assert roa.value == 10.0
+        assert roa.unit == "%"
+        assert chunk_id in roa.source_chunk_ids
+
+        # 3. Current Ratio: 600 / 300 = 2.0
+        cr = [f for f in findings if f.metric == "current_ratio" and f.period == "2025"][0]
+        assert cr.value == 2.0
+        assert cr.unit == "ratio"
+
+        # 4. Debt-to-Equity: 600 / 900 = 0.67
+        dte = [f for f in findings if f.metric == "debt_to_equity" and f.period == "2025"][0]
+        assert dte.value == 0.67
+        assert dte.unit == "ratio"
+
+        # 5. Free Cash Flow (FCF): 400 - 150 = 250.0
+        fcf = [f for f in findings if f.metric == "free_cash_flow" and f.period == "2025"][0]
+        assert fcf.value == 250.0
+        assert fcf.unit == "$"
+
+    async def test_05c_edge_cases_zero_division_and_negative_values(self):
+        """Sprint 10.1: Test zero division safety, missing denominator, and negative net income."""
+        chunk_id = uuid.uuid4()
+        chunk_content = (
+            "Consolidated Statements of Operations\n"
+            "Year Ended December 31, 2025\n"
+            "Total Revenue: $0\n"
+            "Operating Income: $(100)\n"
+            "Net Income: $(50)\n"
+            "Total Assets: $0\n"
+            "Total Liabilities: $300\n"
+            "Total Stockholders' Equity: $0\n"
+            "Operating Cash Flow: $(80)\n"
+            "Capital Expenditures: $(40)"
+        )
+        r = RetrievalResult(
+            chunk_id=chunk_id,
+            document_id=uuid.uuid4(),
+            content=chunk_content,
+            chunk_type="table",
+            chunk_index=0,
+            page_number=1,
+            similarity=0.90,
+            metadata={},
+        )
+
+        state: ResearchState = {
+            "original_query": "Calculate ratios",
+            "standalone_query": "Calculate ratios",
+            "sub_queries": [],
+            "retrieved_chunks": [r],
+            "session_id": None,
+            "document_id": None,
+            "top_k": 5,
+            "min_similarity": 0.0,
+            "findings": [],
+            "citation_audit": None,
+            "guardrails_validation": None,
+            "final_answer": None,
+            "citations": [],
+            "grounded": False,
+            "step_count": 2,
+            "status": "retrieved",
+            "error": None,
+        }
+
+        # Should complete gracefully without ZeroDivisionError or crash
+        res = await FinancialAnalyzerNode.analyze(state)
+        findings = res["findings"]
+
+        # Revenue = 0 -> Operating Margin & ROA (Assets = 0) & D/E (Equity = 0) skipped safely
+        assert not any(f.metric == "operating_margin" for f in findings)
+        assert not any(f.metric == "roa" for f in findings)
+        assert not any(f.metric == "debt_to_equity" for f in findings)
+
+        # FCF with negative OCF (-80) and negative/bracketed CapEx (-40): -80 - 40 = -120.0
+        fcf = [f for f in findings if f.metric == "free_cash_flow"][0]
+        assert fcf.value == -120.0
+
+    async def test_05d_multi_period_cagr_and_sequential_yoy(self):
+        """Sprint 10.2: Test chronological ordering, sequential YoY across 4 years, and CAGR."""
+        chunk1_id = uuid.uuid4()
+        chunk2_id = uuid.uuid4()
+
+        # Input text arrives with unordered years: 2025, 2022, 2024, 2023
+        doc_id = uuid.uuid4()
+        chunk1 = RetrievalResult(
+            chunk_id=chunk1_id,
+            document_id=doc_id,
+            content=(
+                "Historical Revenue Operations\n"
+                "Years 2025 2022\n"
+                "Total Revenue $150 $100"
+            ),
+            chunk_type="table",
+            chunk_index=0,
+            page_number=1,
+            similarity=0.92,
+            metadata={},
+        )
+        chunk2 = RetrievalResult(
+            chunk_id=chunk2_id,
+            document_id=doc_id,
+            content=(
+                "Historical Revenue Operations\n"
+                "Years 2024 2023\n"
+                "Total Revenue $135 $115"
+            ),
+            chunk_type="table",
+            chunk_index=1,
+            page_number=2,
+            similarity=0.91,
+            metadata={},
+        )
+
+        state: ResearchState = {
+            "original_query": "Revenue trend and CAGR from 2022 to 2025",
+            "standalone_query": "Revenue trend and CAGR from 2022 to 2025",
+            "sub_queries": [],
+            "retrieved_chunks": [chunk1, chunk2],
+            "session_id": None,
+            "document_id": None,
+            "top_k": 5,
+            "min_similarity": 0.0,
+            "findings": [],
+            "citation_audit": None,
+            "guardrails_validation": None,
+            "final_answer": None,
+            "citations": [],
+            "grounded": False,
+            "step_count": 2,
+            "status": "retrieved",
+            "error": None,
+        }
+
+        res = await FinancialAnalyzerNode.analyze(state)
+        findings = res["findings"]
+
+        # 1. Sequential YoY checks
+        # 2022 = 100, 2023 = 115 => 2023 vs 2022 = +15.0%
+        yoy_23_22 = [f for f in findings if f.metric == "revenue_growth" and f.period == "2023_vs_2022"][0]
+        assert yoy_23_22.value == 15.0
+
+        # 2023 = 115, 2024 = 135 => 2024 vs 2023 = +17.39%
+        yoy_24_23 = [f for f in findings if f.metric == "revenue_growth" and f.period == "2024_vs_2023"][0]
+        assert yoy_24_23.value == 17.39
+
+        # 2024 = 135, 2025 = 150 => 2025 vs 2024 = +11.11%
+        yoy_25_24 = [f for f in findings if f.metric == "revenue_growth" and f.period == "2025_vs_2024"][0]
+        assert yoy_25_24.value == 11.11
+
+        # 2. Multi-year CAGR: 2022 ($100) to 2025 ($150) over N = 3 elapsed years
+        # ((150 / 100) ^ (1/3) - 1) * 100 = 14.47%
+        cagr = [f for f in findings if f.metric == "revenue_cagr" and f.period == "2022_to_2025"][0]
+        assert cagr.value == 14.47
+        assert cagr.unit == "%"
+        # Provenance must merge all source chunk IDs
+        assert chunk1_id in cagr.source_chunk_ids
+        assert chunk2_id in cagr.source_chunk_ids
+
+        # 3. Deterministic Trend: 100 -> 115 -> 135 -> 150 => Consistent Increase
+        trend = [f for f in findings if f.metric == "revenue_trend" and f.period == "2022_to_2025"][0]
+        assert trend.unit == "trend"
+        assert "Consistent Increase" in trend.calculation
+
+    async def test_05e_cagr_missing_intermediate_years_and_edge_cases(self):
+        """Sprint 10.2: Test CAGR elapsed years with missing intermediate periods, volatile trends, and negative start."""
+        chunk_id = uuid.uuid4()
+        # 2020 = 100, 2025 = 150 (missing 2021, 2022, 2023, 2024) -> N = 5 elapsed years
+        # ((150 / 100) ^ (1/5) - 1) * 100 = 8.45%
+        chunk = RetrievalResult(
+            chunk_id=chunk_id,
+            document_id=uuid.uuid4(),
+            content=(
+                "Financial Growth Summary\n"
+                "Years 2025 2020\n"
+                "Total Revenue $150 $100"
+            ),
+            chunk_type="table",
+            chunk_index=0,
+            page_number=1,
+            similarity=0.95,
+            metadata={},
+        )
+
+        state: ResearchState = {
+            "original_query": "Revenue CAGR from 2020 to 2025",
+            "standalone_query": "Revenue CAGR from 2020 to 2025",
+            "sub_queries": [],
+            "retrieved_chunks": [chunk],
+            "session_id": None,
+            "document_id": None,
+            "top_k": 5,
+            "min_similarity": 0.0,
+            "findings": [],
+            "citation_audit": None,
+            "guardrails_validation": None,
+            "final_answer": None,
+            "citations": [],
+            "grounded": False,
+            "step_count": 2,
+            "status": "retrieved",
+            "error": None,
+        }
+
+        res = await FinancialAnalyzerNode.analyze(state)
+        findings = res["findings"]
+
+        cagr = [f for f in findings if f.metric == "revenue_cagr" and f.period == "2020_to_2025"][0]
+        assert cagr.value == 8.45
+        assert "Incomplete Series" in cagr.calculation
+
+    async def test_05f_trend_classifications_decrease_flat_volatile(self):
+        """Sprint 10.2: Test Consistent Decrease, Flat, and Volatile trend classifications."""
+        chunk_id = uuid.uuid4()
+        chunk = RetrievalResult(
+            chunk_id=chunk_id,
+            document_id=uuid.uuid4(),
+            content=(
+                "Multi-Year Income Statements\n"
+                "Years 2025 2024 2023\n"
+                "Total Revenue $100 $100 $100\n"
+                "Operating Income $100 $120 $90\n"
+                "Gross Profit $80 $90 $100"
+            ),
+            chunk_type="table",
+            chunk_index=0,
+            page_number=1,
+            similarity=0.95,
+            metadata={},
+        )
+
+        state: ResearchState = {
+            "original_query": "Multi-year trends",
+            "standalone_query": "Multi-year trends",
+            "sub_queries": [],
+            "retrieved_chunks": [chunk],
+            "session_id": None,
+            "document_id": None,
+            "top_k": 5,
+            "min_similarity": 0.0,
+            "findings": [],
+            "citation_audit": None,
+            "guardrails_validation": None,
+            "final_answer": None,
+            "citations": [],
+            "grounded": False,
+            "step_count": 2,
+            "status": "retrieved",
+            "error": None,
+        }
+
+        res = await FinancialAnalyzerNode.analyze(state)
+        findings = res["findings"]
+
+        # Revenue: 100 -> 100 -> 100 => Flat
+        rev_trend = [f for f in findings if f.metric == "revenue_trend"][0]
+        assert "Flat" in rev_trend.calculation
+
+        # Gross Profit: 2023: 100 -> 2024: 90 -> 2025: 80 => Consistent Decrease
+        gp_trend = [f for f in findings if f.metric == "gross_profit_trend"][0]
+        assert "Consistent Decrease" in gp_trend.calculation
+
+        # Operating Income: 2023: 90 -> 2024: 120 -> 2025: 100 => Volatile
+        op_trend = [f for f in findings if f.metric == "operating_income_trend"][0]
+        assert "Volatile" in op_trend.calculation
+
+    async def test_05g_cross_document_isolation_and_comparison(self):
+        """Sprint 10.3: Test that metrics from Document A and Document B remain isolated, and comparison is computed."""
+        id1 = uuid.uuid4()
+        id2 = uuid.uuid4()
+        doc_a_id, doc_b_id = (id1, id2) if str(id1) < str(id2) else (id2, id1)
+        chunk_a_id = uuid.uuid4()
+        chunk_b_id = uuid.uuid4()
+
+        chunk_a = RetrievalResult(
+            chunk_id=chunk_a_id,
+            document_id=doc_a_id,
+            content=(
+                "Company A Financial Statements\n"
+                "Year Ended December 31, 2025\n"
+                "Total Revenue: $100\n"
+                "Net Income: $20"
+            ),
+            chunk_type="table",
+            chunk_index=0,
+            page_number=1,
+            similarity=0.92,
+            metadata={},
+        )
+        chunk_b = RetrievalResult(
+            chunk_id=chunk_b_id,
+            document_id=doc_b_id,
+            content=(
+                "Company B Financial Statements\n"
+                "Year Ended December 31, 2025\n"
+                "Total Revenue: $150\n"
+                "Net Income: $45"
+            ),
+            chunk_type="table",
+            chunk_index=0,
+            page_number=1,
+            similarity=0.91,
+            metadata={},
+        )
+
+        state: ResearchState = {
+            "original_query": "Compare Company A and Company B revenue in 2025",
+            "standalone_query": "Compare Company A and Company B revenue in 2025",
+            "sub_queries": [],
+            "retrieved_chunks": [chunk_a, chunk_b],
+            "session_id": None,
+            "document_id": None,
+            "document_ids": [doc_a_id, doc_b_id],
+            "top_k": 5,
+            "min_similarity": 0.0,
+            "findings": [],
+            "citation_audit": None,
+            "guardrails_validation": None,
+            "final_answer": None,
+            "citations": [],
+            "grounded": False,
+            "step_count": 2,
+            "status": "retrieved",
+            "error": None,
+        }
+
+        res = await FinancialAnalyzerNode.analyze(state)
+        findings = res["findings"]
+
+        # 1. Verify metric isolation: Doc A and Doc B revenue findings exist independently
+        rev_a = [f for f in findings if f.metric == "revenue" and f.document_id == doc_a_id][0]
+        rev_b = [f for f in findings if f.metric == "revenue" and f.document_id == doc_b_id][0]
+        assert rev_a.value == 100.0
+        assert rev_b.value == 150.0
+
+        # 2. Verify deterministic comparison calculations
+        # Absolute Difference: 150 - 100 = 50.0
+        abs_diff = [f for f in findings if f.metric == "revenue_absolute_difference" and f.period == "2025_docB_vs_docA"][0]
+        assert abs_diff.value == 50.0
+        assert chunk_a_id in abs_diff.source_chunk_ids
+        assert chunk_b_id in abs_diff.source_chunk_ids
+
+        # Percentage Difference: ((150 - 100) / 100) * 100 = 50.0%
+        pct_diff = [f for f in findings if f.metric == "revenue_comparison" and f.period == "2025_docB_vs_docA"][0]
+        assert pct_diff.value == 50.0
+        assert pct_diff.unit == "%"
+        assert chunk_a_id in pct_diff.source_chunk_ids
+        assert chunk_b_id in pct_diff.source_chunk_ids
 
 
 @pytest.mark.asyncio

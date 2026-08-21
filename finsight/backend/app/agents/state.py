@@ -25,7 +25,8 @@ class FinancialFinding(BaseModel):
     metric: str = Field(..., description="Canonical metric name (e.g. 'revenue', 'gross_profit', 'gross_margin')")
     period: str = Field(..., description="Fiscal period or year (e.g. '2025', '2024', 'Q3')")
     value: float = Field(..., description="Numerical figure extracted or computed")
-    unit: str = Field("$", description="Unit or currency (e.g. '$', '%', 'shares', 'ratio')")
+    unit: str = Field("$", description="Unit or currency (e.g. '$', '%', 'shares', 'ratio', 'trend')")
+    document_id: UUID | None = Field(None, description="Document UUID owning this finding (if from a single document)")
     source_chunk_ids: list[UUID] = Field(
         default_factory=list,
         description="Chunk UUIDs backing this numerical finding",
@@ -77,6 +78,7 @@ class ResearchState(TypedDict):
     original_query: str
     standalone_query: str
     document_id: UUID | None
+    document_ids: list[UUID] | None
     top_k: int
     min_similarity: float
     sub_queries: list[str]

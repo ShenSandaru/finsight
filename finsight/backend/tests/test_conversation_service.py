@@ -32,7 +32,7 @@ class MockRAGService:
         self.generation_service = FakeGenService()
         self.retrieval_service = FakeRetService()
 
-    async def answer(self, query: str, top_k: int = 5, min_similarity: float = 0.3, document_id=None, db=None) -> RAGResponse:
+    async def answer(self, query: str, top_k: int = 5, min_similarity: float = 0.3, document_id=None, document_ids=None, db=None) -> RAGResponse:
         self.called_query = query
         self.called_top_k = top_k
         self.called_min_sim = min_similarity

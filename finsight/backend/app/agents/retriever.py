@@ -21,14 +21,22 @@ class RetrieverNode:
 
     async def retrieve(self, state: ResearchState) -> dict[str, Any]:
         """
-        Execute multi-query retrieval and deduplication.
+        Execute multi-query retrieval and deduplication across single or multiple documents.
         """
         sub_queries = state.get("sub_queries") or [state.get("standalone_query", "")]
         top_k = state.get("top_k", 5)
         min_similarity = state.get("min_similarity", 0.0)
         document_id = state.get("document_id")
+        document_ids = state.get("document_ids")
 
-        logger.info("Retriever Node executing %d sub-queries (top_k=%d, min_sim=%.2f)", len(sub_queries), top_k, min_similarity)
+        logger.info(
+            "Retriever Node executing %d sub-queries (top_k=%d, min_sim=%.2f, doc_id=%s, doc_ids=%s)",
+            len(sub_queries),
+            top_k,
+            min_similarity,
+            document_id,
+            document_ids,
+        )
 
         all_results: list[RetrievalResult] = []
         chunk_map: dict[UUID, RetrievalResult] = {}
@@ -39,6 +47,7 @@ class RetrieverNode:
                 top_k=top_k,
                 min_similarity=min_similarity,
                 document_id=document_id,
+                document_ids=document_ids,
             )
             for r in results:
                 # Deduplication: if already retrieved by a previous subquery, keep highest similarity

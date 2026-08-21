@@ -5,7 +5,7 @@ from typing import Any
 from arq.connections import RedisSettings
 
 from app.core.config import get_settings
-from app.tasks.definitions import health_check_task, failing_test_task, process_document
+from app.tasks.definitions import health_check_task, failing_test_task, process_document, generate_financial_report
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,6 +33,7 @@ class WorkerSettings:
         health_check_task,
         failing_test_task,
         process_document,
+        generate_financial_report,
     ]
     redis_settings = RedisSettings(
         host=settings.REDIS_HOST,

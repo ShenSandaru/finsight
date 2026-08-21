@@ -408,16 +408,58 @@ flowchart TD
 ### Phase 10 — Advanced Financial Research Capabilities & Report Endpoints
 * **Goal:** Extend research capabilities with cross-company filing comparisons, deep financial ratio analysis, and asynchronous long-form research report endpoints.
 * **Why Needed:** Enable analysts to run deep comparative financial research across multiple documents and export structured reports.
-* **Current Status:** **PLANNED / NEXT**
+* **Current Status:** **Sprint 10.1, 10.2, 10.3, 10.4 & 10.5 COMPLETE & VERIFIED (Phase 10 Fully Completed & Audited)**.
 * **Tasks:**
-  - [ ] Advanced financial ratio analysis (Liquidity, Solvency, Efficiency, Profitability metrics).
-  - [ ] Multi-document & cross-company comparative analysis.
-  - [ ] Implement report endpoints (`POST /api/v1/reports`, `GET /api/v1/reports/{id}`, `GET /api/v1/reports`).
-  - [ ] Rich structured markdown financial reports with tabular synthesis and export capabilities.
-* **Files Likely Affected:**
-  - `backend/app/schemas/report.py`
-  - `backend/app/api/routes/reports.py`
-  - `backend/app/services/report_service.py`
+  - [x] Extend `FinancialAnalyzerNode` (`backend/app/agents/financial_analyzer.py`) with deterministic metric extraction and ratio calculations (Sprint 10.1):
+    - [x] Operating Margin: `(operating_income / revenue) * 100` (`%`)
+    - [x] Return on Assets (ROA): `(net_income / total_assets) * 100` (`%`)
+    - [x] Current Ratio: `total_current_assets / total_current_liabilities` (`ratio`)
+    - [x] Debt-to-Equity: `total_liabilities / total_stockholders_equity` (`ratio`)
+    - [x] Free Cash Flow (FCF): `operating_cash_flow - abs(capital_expenditures)` (`$`)
+    - [x] Multi-chunk provenance merging (`source_chunk_ids = list(set(num.source_chunk_ids + den.source_chunk_ids))`)
+    - [x] Zero-division protection (`den.value != 0`) and bracketed negative value parsing `$(400)`.
+  - [x] Multi-Period Sequencing & CAGR Trend Analysis (Sprint 10.2):
+    - [x] Annual 4-digit period filtering (`2022`, `2023`, `2024`, `2025`) and quarterly exclusion.
+    - [x] Chronological ascending ordering and metric grouping across time series.
+    - [x] Sequential YoY growth calculation between every adjacent chronological pair.
+    - [x] Multi-period Compound Annual Growth Rate (CAGR) with elapsed-year exponent $N = p_{\text{end}} - p_{\text{start}}$.
+    - [x] Deterministic trend direction classification (`Consistent Increase`, `Consistent Decrease`, `Flat`, `Volatile`, `Incomplete Series`).
+    - [x] Complete multi-period source provenance aggregation.
+  - [x] Multi-Document & Cross-Company Comparison (Sprint 10.3):
+    - [x] Multi-document vector retrieval filtering (`RetrievalService.search(document_ids=[...])` using pgvector in-database `.in_()`).
+    - [x] Schema extensions for `document_ids: list[UUID] | None` on `SearchRequest`, `RAGRequest`, `ConversationQueryRequest`, `ResearchState`, and `document_id: UUID | None` on `FinancialFinding`.
+    - [x] Document-scoped metric isolation in `FinancialAnalyzerNode` (grouping raw metrics strictly by `(document_id, period, metric)`).
+    - [x] Deterministic cross-document absolute difference ($\text{Doc B} - \text{Doc A}$) and percentage difference ($((\text{Doc B} - \text{Doc A}) / |\text{Doc A}|) \times 100$).
+    - [x] Merged dual provenance (`source_chunk_ids` containing evidence from both compared filings).
+    - [x] Citation auditing and deterministic Guardrails output validation across multi-document responses.
+  - [x] Structured Financial Research Reports & REST Endpoints (Sprint 10.4):
+    - [x] Database migration `0005_enhance_reports_schema.py` and model update `app/models/report.py` (`document_ids`, `executive_summary`, `findings`, `content`, `citations`, `error_message`, `updated_at`).
+    - [x] Pydantic schemas in `backend/app/schemas/report.py` (`CreateReportRequest`, `ReportResponse`, `ReportListResponse`).
+    - [x] `ReportService` (`backend/app/services/report_service.py`) for deterministic publication-ready GitHub Flavored Markdown report compilation.
+    - [x] Background ARQ task `generate_financial_report` in `app/tasks/definitions.py` reusing verified `FinancialResearchService.execute_research()` DAG and `ResponseGuard`.
+    - [x] Worker registration in `app/worker.py` and REST API endpoints in `app/api/routes/reports.py` (`POST /reports`, `GET /reports/{id}`, `GET /reports`, `DELETE /reports/{id}`).
+  - [x] Financial Evaluation & Benchmark Suite (Sprint 10.5):
+    - [x] Standalone evaluation package in `backend/evaluation/` (`schemas.py`, `runner.py`, `evaluators/`).
+    - [x] Standardized benchmark dataset in `backend/evaluation/data/financial_benchmark_v1.json` covering single metrics, calculated ratios, time-series CAGR, cross-doc comparison, multi-turn follow-ups, and adversarial insufficient evidence.
+    - [x] Deterministic evaluators (`RetrievalEvaluator`, `NumericalEvaluator`, `CitationEvaluator`, `GroundingEvaluator`, `MultiDocumentIsolationEvaluator`).
+    - [x] Quality threshold enforcement (Numerical Exact Match $\ge 98\%$, Hit Rate $\ge 95\%$, Citation Precision $\ge 95\%$, Isolation $= 100\%$, Adversarial $= 100\%$).
+    - [x] Automated CLI benchmark runner `backend/evaluation/run_benchmark.py`.
+  - [x] Unit and integration test suite passing (254 total pytest tests, 100% pass rate) (Sprint 10.1–10.5).
+  - [x] Docker E2E test suite updated with Scenario 14 (Financial Evaluation Benchmark Suite Execution) passing (14/14 E2E scenarios) (Sprint 10.5).
+  - [x] Developer documentation in `docs/development/financial-metrics.md`, `docs/development/trend-analysis.md`, `docs/development/cross-document-comparison.md`, `docs/development/research-reports.md`, and `docs/development/evaluation.md`.
+* **Files Affected:**
+  - `backend/evaluation/schemas.py`
+  - `backend/evaluation/evaluators/`
+  - `backend/evaluation/data/financial_benchmark_v1.json`
+  - `backend/evaluation/runner.py`
+  - `backend/evaluation/run_benchmark.py`
+  - `backend/tests/test_evaluation_framework.py`
+  - `backend/tests/e2e_test.py`
+  - `docs/development/evaluation.md`
+  - `README.md`
+  - `plan.md`
+* **Acceptance Criteria:**
+  - Standalone evaluation package executes against benchmark dataset; deterministic evaluators measure retrieval, numerical, citation, grounding, isolation, and fallback metrics; quality thresholds pass with zero production pipeline modifications; 254 backend pytest tests and 14 Docker E2E scenarios pass cleanly.
 
 ---
 
