@@ -170,6 +170,23 @@ async def verify_document_chunks_in_db(doc_id_str: str):
         return chunks
 
 
+async def verify_hnsw_index_in_db():
+    """Verify that the HNSW index is active and valid in PostgreSQL system catalogs."""
+    from app.services.vector_index_service import VectorIndexService
+    settings = get_settings()
+    isolated_engine = create_async_engine(settings.DATABASE_URL, poolclass=NullPool)
+    isolated_session = async_sessionmaker(bind=isolated_engine, class_=AsyncSession, expire_on_commit=False)
+
+    async with isolated_session() as session:
+        info = await VectorIndexService.get_hnsw_index_info(db=session)
+        assert info.exists is True, "HNSW index does not exist in PostgreSQL"
+        assert info.index_method == "hnsw", f"Expected method 'hnsw', got '{info.index_method}'"
+        assert info.opclass_name == "vector_cosine_ops", f"Expected 'vector_cosine_ops', got '{info.opclass_name}'"
+        assert info.is_valid is True, "HNSW index is marked invalid in pg_index"
+        print("  -> PostgreSQL catalog verification: HNSW index 'ix_chunks_embedding_hnsw_cosine' is ACTIVE & VALID.")
+        await isolated_engine.dispose()
+
+
 def search_retrieval(query: str, top_k: int = 5, min_similarity: float = 0.0, document_id: str | None = None) -> dict:
     payload = {
         "query": query,
@@ -314,8 +331,9 @@ def run_e2e_tests():
 
     print("  ✅ E2E 4 PASSED: Multi-page Financial PDF chunked and indexed with text + semantic table embeddings.")
 
-    # 5. Vector Similarity Search & Retrieval (Sprint 6.2 Verification)
-    print("\n[E2E 5] Executing Vector Similarity Search against indexed Financial PDF...")
+    # 5. Vector Similarity Search & Retrieval (Sprint 6.2 & 8.1 HNSW Verification)
+    print("\n[E2E 5] Verifying HNSW Vector Index and Executing Vector Similarity Search against indexed Financial PDF...")
+    asyncio.run(verify_hnsw_index_in_db())
     search_queries = [
         "revenue gross profit operations",
         "balance sheet assets liabilities",

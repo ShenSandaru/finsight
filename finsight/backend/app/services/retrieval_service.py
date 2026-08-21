@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -121,10 +121,20 @@ class RetrievalService:
         )
 
         if db is not None:
+            if settings.HNSW_ENABLED and settings.HNSW_EF_SEARCH > 0:
+                try:
+                    await db.execute(text(f"SET LOCAL hnsw.ef_search = {int(settings.HNSW_EF_SEARCH)}"))
+                except Exception as exc:
+                    logger.debug("Could not set local hnsw.ef_search: %s", exc)
             result = await db.execute(stmt)
             rows = result.all()
         else:
             async with self.session_factory() as session:
+                if settings.HNSW_ENABLED and settings.HNSW_EF_SEARCH > 0:
+                    try:
+                        await session.execute(text(f"SET LOCAL hnsw.ef_search = {int(settings.HNSW_EF_SEARCH)}"))
+                    except Exception as exc:
+                        logger.debug("Could not set local hnsw.ef_search: %s", exc)
                 result = await session.execute(stmt)
                 rows = result.all()
 

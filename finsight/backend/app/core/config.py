@@ -37,6 +37,17 @@ class Settings(BaseSettings):
     RETRIEVAL_MAX_TOP_K: int = 20
     RETRIEVAL_MIN_SIMILARITY: float = 0.0
 
+    # pgvector HNSW Configuration
+    HNSW_ENABLED: bool = True
+    HNSW_M: int = 16
+    HNSW_EF_CONSTRUCTION: int = 64
+    HNSW_EF_SEARCH: int = 40
+
+    # Retrieval Benchmark Configuration
+    RETRIEVAL_BENCHMARK_TOP_K: int = 5
+    RETRIEVAL_BENCHMARK_QUERIES: int = 20
+    RETRIEVAL_RECALL_TARGET: float = 0.95
+
     # RAG Configuration
     RAG_DEFAULT_TOP_K: int = 5
     RAG_MAX_TOP_K: int = 20
