@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     EMBEDDING_MAX_RETRIES: int = 3
     EMBEDDING_TIMEOUT_SECONDS: float = 60.0
 
+    # Retrieval Configuration
+    RETRIEVAL_DEFAULT_TOP_K: int = 5
+    RETRIEVAL_MAX_TOP_K: int = 20
+    RETRIEVAL_MIN_SIMILARITY: float = 0.0
+
     # File Storage
     STORAGE_PATH: Path = Path("/app/storage")
     MAX_FILE_SIZE: int = 50 * 1024 * 1024  # 50MB in bytes

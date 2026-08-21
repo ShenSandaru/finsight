@@ -270,3 +270,43 @@ class EmbeddingService:
         vectors = await self.embed_texts(texts)
 
         return [(c.id, vec) for c, vec in zip(chunks, vectors)]
+
+    async def embed_query(self, query: str) -> list[float]:
+        """
+        Generate a 1536-dimensional embedding vector for a user query.
+        Uses task_type="RETRIEVAL_QUERY" to match document embeddings.
+        """
+        if not isinstance(query, str):
+            raise ProcessingError(
+                message=f"Invalid query type: expected str, got {type(query).__name__}",
+                details={"expected": "str", "actual": type(query).__name__},
+            )
+
+        cleaned_query = query.strip()
+        if not cleaned_query:
+            raise ProcessingError(
+                message="Cannot generate embedding for an empty or whitespace-only query",
+                details={"query": query},
+            )
+
+        config = types.EmbedContentConfig(
+            task_type="RETRIEVAL_QUERY",
+            output_dimensionality=self.dimensions,
+        )
+
+        vectors = await self._embed_batch_with_retry([cleaned_query], config)
+        if not vectors or len(vectors) != 1:
+            raise ProcessingError(
+                message="Embedding service failed to return a valid vector for query",
+                details={"model": self.model},
+            )
+
+        query_vec = vectors[0]
+        if len(query_vec) != self.dimensions:
+            raise ProcessingError(
+                message=f"Query embedding dimension mismatch: expected {self.dimensions}, got {len(query_vec)}",
+                details={"expected": self.dimensions, "actual": len(query_vec)},
+            )
+
+        return query_vec
+

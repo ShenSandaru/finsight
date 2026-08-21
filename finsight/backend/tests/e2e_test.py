@@ -6,6 +6,13 @@ import time
 import uuid
 import asyncio
 import urllib.request
+import sys
+import os
+from pathlib import Path
+
+# Ensure app package is discoverable
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from pypdf import PdfWriter
 from pypdf.generic import NameObject, DictionaryObject, DecodedStreamObject
 
@@ -163,6 +170,20 @@ async def verify_document_chunks_in_db(doc_id_str: str):
         return chunks
 
 
+def search_retrieval(query: str, top_k: int = 5, min_similarity: float = 0.0, document_id: str | None = None) -> dict:
+    payload = {
+        "query": query,
+        "top_k": top_k,
+        "min_similarity": min_similarity,
+        "document_id": document_id,
+    }
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request("http://127.0.0.1:8000/api/v1/search", data=body)
+    req.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
 def run_e2e_tests():
     print("==================================================")
     print("STARTING E2E INTEGRATION & PIPELINE VERIFICATION")
@@ -279,6 +300,40 @@ def run_e2e_tests():
 
     print("  ✅ E2E 4 PASSED: Multi-page Financial PDF chunked and indexed with text + semantic table embeddings.")
 
+    # 5. Vector Similarity Search & Retrieval (Sprint 6.2 Verification)
+    print("\n[E2E 5] Executing Vector Similarity Search against indexed Financial PDF...")
+    search_queries = [
+        "revenue gross profit operations",
+        "balance sheet assets liabilities",
+        "cash flows operating activities",
+    ]
+
+    for q in search_queries:
+        search_res = search_retrieval(query=q, top_k=5, min_similarity=0.0, document_id=fin_id)
+        assert search_res["query"] == q, f"Query mismatch: expected '{q}', got '{search_res['query']}'"
+        assert search_res["total_results"] > 0, f"Expected > 0 results for query '{q}'"
+        results = search_res["results"]
+        
+        # Verify descending order of similarity
+        similarities = [r["similarity"] for r in results]
+        assert similarities == sorted(similarities, reverse=True), f"Results not sorted by similarity descending: {similarities}"
+        
+        # Verify contract preservation
+        for item in results:
+            assert item["chunk_id"] is not None
+            assert item["document_id"] == fin_id
+            assert item["chunk_type"] in ("text", "table")
+            assert item["page_number"] is not None
+            assert 0.0 <= item["similarity"] <= 1.0
+            assert isinstance(item["metadata"], dict)
+            if item["chunk_type"] == "table":
+                assert "statement_type" in item["metadata"]
+                assert "fiscal_periods" in item["metadata"]
+        
+        print(f"  -> Search query '{q}': retrieved {len(results)} chunks (top match similarity: {results[0]['similarity']:.4f}, type: {results[0]['chunk_type']})")
+
+    print("  ✅ E2E 5 PASSED: In-database pgvector similarity search, descending ordering, and metadata preservation verified.")
+
     print("\n==================================================")
     print("ALL END-TO-END TESTS PASSED SUCCESSFULLY! 🎉")
     print("==================================================")
@@ -286,3 +341,4 @@ def run_e2e_tests():
 
 if __name__ == "__main__":
     run_e2e_tests()
+

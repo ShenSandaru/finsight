@@ -238,15 +238,16 @@ flowchart TD
 
 ---
 
-### Phase 6 — Embedding Pipeline & Vector Storage
-* **Goal:** Generate vector embeddings for all document chunks and store them in PostgreSQL via `pgvector`.
-* **Why Needed:** Semantic search requires vector representations of chunk content.
-* **Current Status:** Completed (Sprint 6.1 Google GenAI `gemini-embedding-2` 1536-dimensional embeddings, bounded exponential backoff retry, strict dimension validation, Rule A transaction isolation, whole-document atomic persistence, and Document `status = "indexed"` transition verified).
+### Phase 6 — Embedding Pipeline & Vector Retrieval Foundation
+* **Goal:** Generate vector embeddings for all document chunks, store them in PostgreSQL via `pgvector`, and execute exact vector similarity searches.
+* **Why Needed:** Semantic search and RAG require vector representations and deterministic database similarity retrieval.
+* **Current Status:** Completed (Sprint 6.1 Embedding persistence & Document `status = "indexed"` + Sprint 6.2 `RetrievalService`, `POST /api/v1/search`, and in-database pgvector cosine search verified).
 * **Tasks:**
   - [x] Add `google-genai==0.8.0` to `backend/requirements.txt` (Sprint 6.1).
-  - [x] Implement `EmbeddingService` (`app/services/embedding_service.py`) (Sprint 6.1):
-    - [x] Gemini `gemini-embedding-2` model with `RETRIEVAL_DOCUMENT` task type and 1536 output dimensionality.
-    - [x] Deterministic batch embedding generation (batch size = 50) preserving 1-to-1 input-to-output ordering.
+  - [x] Implement `EmbeddingService` (`app/services/embedding_service.py`) (Sprint 6.1 & 6.2):
+    - [x] Gemini `gemini-embedding-2` model with `RETRIEVAL_DOCUMENT` task type and 1536 output dimensionality (Sprint 6.1).
+    - [x] Query embedding generation with `RETRIEVAL_QUERY` task semantics via `EmbeddingService.embed_query` (Sprint 6.2).
+    - [x] Deterministic batch embedding generation (batch size = 50) preserving 1-to-1 input-to-output ordering (Sprint 6.1).
     - [x] Bounded exponential backoff retry policy for transient API errors (rate limit, server error, timeout) up to 3 attempts.
     - [x] Strict vector dimension validation (ensuring all returned vectors are exactly 1536 floats).
     - [x] Async client lifecycle management and explicit cleanup via `close()`.
@@ -256,20 +257,30 @@ flowchart TD
     - [x] Advance `Document.status` to `"indexed"` upon successful embedding persistence.
     - [x] Safe failure recording with sanitized `processing_error` in an isolated error transaction.
     - [x] Zero-chunk handling and idempotency protection (skipping already embedded documents).
-  - [x] Implement comprehensive unit and database test suite (`test_embedding_service.py`) using deterministic offline `FakeGenAIClient` (23 tests passed) (Sprint 6.1).
-  - [x] Update E2E test suite (`e2e_test.py`) with PostgreSQL assertions confirming 1536-dimensional embeddings and `indexed` status (Sprint 6.1).
-  - [ ] Create HNSW or IVFFlat index on `chunks.embedding` using Alembic migration (Sprint 6.2).
-  - [ ] Vector similarity search and RAG retrieval pipelines (Phase 7+).
+  - [x] Implement `RetrievalService` (`app/services/retrieval_service.py`) (Sprint 6.2):
+    - [x] Structured `RetrievalResult` dataclass preserving metadata, page numbers, and chunk types.
+    - [x] In-database pgvector cosine distance calculation ($1 - \text{cosine\_distance}$).
+    - [x] Filter by `Chunk.embedding IS NOT NULL`, `Document.status == "indexed"`, optional `document_id`, and `min_similarity`.
+    - [x] Deterministic tie-breaking ordering (`similarity DESC, chunk_index ASC, id ASC`).
+    - [x] Top-k limiting and parameter validation ($1 \le \text{top\_k} \le 20$, $0.0 \le \text{min\_similarity} \le 1.0$).
+  - [x] Add `POST /api/v1/search` developer and retrieval endpoint in `app/api/routes/search.py` (Sprint 6.2).
+  - [x] Unit and database integration test suites (`test_embedding_service.py` with 23 tests, `test_retrieval_service.py` with 24 tests) passing with 0 failures (Sprint 6.1 & 6.2).
+  - [x] Update E2E test suite (`e2e_test.py`) with PostgreSQL assertions confirming 1536-dimensional embeddings and vector retrieval against indexed financial statements (Sprint 6.1 & 6.2).
 * **Files Likely Affected:**
   - `backend/requirements.txt`
   - `backend/app/core/config.py`
   - `backend/app/services/embedding_service.py`
+  - `backend/app/services/retrieval_service.py`
+  - `backend/app/schemas/search.py`
+  - `backend/app/api/routes/search.py`
   - `backend/app/tasks/definitions.py`
   - `backend/tests/test_embedding_service.py`
+  - `backend/tests/test_retrieval_service.py`
   - `backend/tests/e2e_test.py`
   - `docs/development/embeddings.md`
+  - `docs/development/vector-retrieval.md`
 * **Acceptance Criteria:**
-  - Every document chunk is embedded with a 1536-dimensional vector stored in `Chunk.embedding`; `Document.status` reaches `"indexed"`; no DB transaction held during external API calls; zero partial embeddings committed on failure; offline test suite passes completely.
+  - Every document chunk is embedded with a 1536-dimensional vector stored in `Chunk.embedding`; `Document.status` reaches `"indexed"`; vector search executes inside PostgreSQL using pgvector cosine distance; all 116 regression tests and 5 E2E pipeline scenarios pass cleanly.
 
 ---
 

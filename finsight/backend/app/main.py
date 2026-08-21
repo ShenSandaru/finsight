@@ -16,7 +16,7 @@ from app.core.exceptions import (
     ExternalServiceError,
 )
 from app.schemas.error import ErrorResponse, ErrorDetail
-from app.api.routes import documents, tasks
+from app.api.routes import documents, tasks, search
 
 logger = logging.getLogger("finsight.api")
 settings = get_settings()
@@ -146,6 +146,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 # Register routers
 app.include_router(documents.router, prefix="/api/v1")
 app.include_router(tasks.router, prefix="/api/v1")
+app.include_router(search.router, prefix="/api/v1")
 
 
 @app.get("/health")
