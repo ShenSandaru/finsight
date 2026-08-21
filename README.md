@@ -4,21 +4,27 @@ FinSight is a robust application designed to ingest, process, and analyze docume
 
 ## 🎯 Purpose and How it Works
 
-The core purpose of FinSight is to handle large documents, break them down into manageable pieces (chunks), and use AI-driven agents to retrieve insights from them. 
+FinSight enables automated financial research, multi-turn conversational analysis, and deep filing audits with strict grounding guarantees.
 
 **Workflow:**
-1. **Document Ingestion:** Users upload documents via the backend API.
-2. **Processing & Chunking:** The `document_service` processes the files, extracting text and splitting them into smaller data `chunks`.
-3. **Vectorization:** These chunks are converted into embeddings and stored in PostgreSQL using the `pgvector` extension for semantic search capabilities.
-4. **Agent Analysis:** Dedicated AI agents interact with the vector database to answer queries, generate reports, or extract specific financial insights.
+1. **Multi-Format Ingestion:** Ingests PDF, TXT, and CSV documents with magic-byte validation.
+2. **Table Extraction & Classification:** Extracts financial tables via `pdfplumber` and applies deterministic semantic classification (`income_statement`, `balance_sheet`, `cash_flow`, fiscal periods).
+3. **Table-Aware Chunking:** Chunks text and tables while preserving structured Markdown representations and JSONB metadata.
+4. **Vector Embedding & HNSW Indexing:** Converts chunks into 1536-dimensional vectors using Google Gemini (`gemini-embedding-2`) and indexes them in PostgreSQL with pgvector HNSW cosine search.
+5. **Conversational Memory & Query Rewriting:** Manages isolated conversation sessions and deterministically rewrites pronoun-dependent follow-up queries.
+6. **LangGraph Multi-Agent Research:** Orchestrates a 5-node DAG (`Planner -> Retriever -> Financial Analyzer -> Citation Auditor -> Synthesis`) calculating financial ratios deterministically.
+7. **Deterministic Output Validation (Guardrails):** Enforces Pydantic v2 runtime constraints, validating output structure, citation provenance, numerical bounds, and grounding guarantees before client delivery.
 
 ## 🛠️ Technologies Used
 
-* **Backend:** Python (structured for modern frameworks like FastAPI)
-* **Database:** PostgreSQL (with `pgvector` extension for AI/embedding storage)
-* **Caching/Queue:** Redis (for fast data retrieval and async task tracking)
+* **Backend Framework:** Python 3.11, FastAPI, SQLAlchemy 2.0 (Async), Alembic
+* **Database & Search:** PostgreSQL 16, pgvector (1536-dim vector embeddings, HNSW index)
+* **Caching & Background Queue:** Redis 7, ARQ async worker
+* **AI & Multi-Agent Orchestration:** Google Gemini 2.0 Flash, Gemini Embeddings, LangGraph, LangChain Core
+* **Validation & Safety:** Pydantic v2, Custom Deterministic Guardrails Layer
+* **Document Processing:** pypdf, pdfplumber
 * **Containerization:** Docker & Docker Compose
-* **Frontend:** (Setup in progress)
+* **Frontend:** (Planned)
 
 ## 📂 Project Structure
 
@@ -84,52 +90,41 @@ Follow these instructions to set up and run the FinSight project on your local m
     ```
 
 ## 🌐 Services and Ports
-
+ 
 Once the application is running via Docker Compose, the services will be available at:
-
-*   **Backend API:** `http://localhost:8000` (e.g., `http://localhost:8000/docs` for API documentation)
+ 
+*   **Backend API:** `http://localhost:8085` (Swagger Docs: `http://localhost:8085/docs`)
 *   **PostgreSQL:** `localhost:5432`
 *   **Redis:** `localhost:6379`
 
-## 📝 Development Progress
+### Running Automated Tests
 
-### Infrastructure & Core Setup
-```
-├─────────────────────────────────────────────────────┤
-│ [✅] Step 1: Docker + PostgreSQL + pgvector         │
-│ [✅] Step 2: FastAPI project skeleton               │
-│ [✅] Step 3: Database models (Document, Chunk)      │
-│ [✅] Step 4: Document upload API                    │
-├─────────────────────────────────────────────────────┤
+```bash
+# Run full Pytest regression suite (222 tests)
+docker compose exec backend pytest -v
+
+# Run full Docker End-to-End Pipeline (9 Scenarios)
+docker compose exec backend python tests/e2e_test.py
 ```
 
-### Document Processing Pipeline
-```
-├─────────────────────────────────────────────────────┤
-│ [🔄] Step 5: PDF parsing (Unstructured.io)          │  ← We are here now
-│ [ ] Step 6: Table-aware chunking                    │
-│ [ ] Step 7: Embedding generation (OpenAI)           │
-│ [ ] Step 8: Vector storage in pgvector              │
-├─────────────────────────────────────────────────────┤
-```
+## 📝 Development Status & Roadmap
 
-### Query & Retrieval System
-```
-├─────────────────────────────────────────────────────┤
-│ [ ] Step 9: Vector similarity search                │
-│ [ ] Step 10: Basic RAG query pipeline               │
-│ [ ] Step 11: Multi-agent orchestrator (LangGraph)   │
-│ [ ] Step 12: Citation/evidence tracing              │
-├─────────────────────────────────────────────────────┤
-```
+| Phase | Milestone | Status |
+|---|---|---|
+| **Phase 1** | Baseline & Async Task Queue (ARQ + Redis) | ✅ Complete |
+| **Phase 2** | Document Ingestion & Validation | ✅ Complete |
+| **Phase 3** | PDF, TXT & CSV Parsing | ✅ Complete |
+| **Phase 4** | Financial Table Extraction & Semantics | ✅ Complete |
+| **Phase 5** | Table-Aware Chunking Strategy | ✅ Complete |
+| **Phase 6** | Gemini Embeddings & Vector Retrieval | ✅ Complete |
+| **Phase 7** | Grounded Single-Turn RAG + Citations | ✅ Complete |
+| **Phase 8** | HNSW Vector Optimization & Conversational Memory | ✅ Complete |
+| **Phase 9.1** | LangGraph Multi-Agent Financial Research | ✅ Complete |
+| **Phase 9.2** | Deterministic AI Output Validation (Guardrails) | ✅ Complete |
+| **Phase 10** | Advanced Financial Research & Reports | 🔄 Planned / Next |
+| **Phase 11** | Frontend Web Application (React / Next.js) | 🔄 Planned |
 
-### Frontend & Polish
-```
-├─────────────────────────────────────────────────────┤
-│ [ ] Step 13: Report generation endpoint             │
-│ [ ] Step 14: React frontend                         │
-│ [ ] Step 15: Production deployment                  │
-├─────────────────────────────────────────────────────┤
-```
-
-
+**Verification Status:**
+* **222 Pytest unit & integration tests passing** (100% pass rate).
+* **9/9 Docker E2E pipeline scenarios passing**.
+* **System Audit Status:** `PRODUCTION-READY FOUNDATION`.
