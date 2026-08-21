@@ -292,3 +292,142 @@ async def failing_test_task(ctx: dict[str, Any], error_reason: str) -> None:
     job_id = ctx.get("job_id", "unknown")
     logger.warning("Executing failing_test_task [job_id=%s] - deliberate error: %s", job_id, error_reason)
     raise RuntimeError(f"Deliberate test failure: {error_reason}")
+
+
+async def generate_financial_report(ctx: dict[str, Any], report_id_str: str) -> dict[str, Any]:
+    """
+    Asynchronous ARQ background task for generating structured financial research reports (Sprint 10.4).
+    1. Loads Report record from PostgreSQL and transitions to 'processing'.
+    2. Invokes the verified multi-agent research workflow (FinancialResearchService.execute_research).
+    3. Compiles structured GitHub Flavored Markdown report.
+    4. Validates output via Guardrails ResponseGuard.
+    5. Persists findings, citations, executive summary, full markdown content, and marks status='completed'.
+    6. On failure, cleanly records sanitized error message and sets status='failed'.
+    """
+    from app.models.report import Report
+    from app.agents.graph import FinancialResearchService
+    from app.services.report_service import ReportService
+    from app.guardrails.response_guard import ResponseGuard
+
+    job_id = ctx.get("job_id", "unknown")
+    try:
+        rep_uuid = uuid.UUID(report_id_str)
+    except ValueError:
+        logger.error("Invalid report UUID format '%s' in job [%s]", report_id_str, job_id)
+        return {"status": "error", "message": "Invalid UUID format"}
+
+    logger.info("Starting financial report generation [report_id=%s, job_id=%s]", rep_uuid, job_id)
+    start_time = time.perf_counter()
+
+    # Step 1: Transition to processing
+    async with async_session() as session:
+        result = await session.execute(select(Report).where(Report.id == rep_uuid))
+        report = result.scalar_one_or_none()
+        if not report:
+            logger.warning("Report with ID '%s' not found in database [job_id=%s]", rep_uuid, job_id)
+            return {"status": "not_found", "report_id": str(rep_uuid)}
+
+        if report.status != "pending":
+            logger.info("Report '%s' already in status '%s' (skipping) [job_id=%s]", rep_uuid, report.status, job_id)
+            return {"status": "skipped", "report_id": str(rep_uuid), "current_status": report.status}
+
+        report.status = "processing"
+        report.error_message = None
+        await session.commit()
+        query_text = report.query
+        doc_ids_raw = report.document_ids
+        report_title = report.title
+
+    # Parse document_ids if provided
+    scoped_doc_ids = None
+    if doc_ids_raw:
+        scoped_doc_ids = [uuid.UUID(str(d)) for d in doc_ids_raw]
+
+    # Step 2: Execute Verified Financial Research DAG (1 Gemini synthesis call inside SynthesisNode)
+    try:
+        research_service = FinancialResearchService()
+        research_state = await research_service.execute_research(
+            query=query_text,
+            document_ids=scoped_doc_ids,
+        )
+
+        # Step 3: Compile Markdown Report
+        markdown_content = ReportService.compile_markdown_report(
+            title=report_title,
+            query=query_text,
+            state=research_state,
+        )
+
+        # Step 4: Validate via Guardrails
+        guardrails_result = research_state.get("guardrails_validation")
+        if not guardrails_result:
+            guardrails_result = ResponseGuard.validate(
+                query=query_text,
+                answer=research_state.get("final_answer", ""),
+                citations=research_state.get("citations", []),
+                retrieved_chunks=research_state.get("retrieved_chunks", []),
+                findings=research_state.get("findings", []),
+            )
+
+        # Step 5: Serialize Findings and Citations for DB Storage
+        serialized_findings = [f.model_dump(mode="json") for f in research_state.get("findings", [])]
+        serialized_citations = [
+            {
+                "chunk_id": str(c.chunk_id),
+                "document_id": str(c.document_id) if c.document_id else None,
+                "page_number": c.page_number,
+                "chunk_type": c.chunk_type,
+                "similarity": c.similarity,
+                "statement_type": c.statement_type,
+                "fiscal_periods": c.fiscal_periods,
+            }
+            for c in research_state.get("citations", [])
+        ]
+
+        # Step 6: Persist Completed Report
+        async with async_session() as session:
+            result = await session.execute(select(Report).where(Report.id == rep_uuid))
+            rep_to_update = result.scalar_one_or_none()
+            if rep_to_update:
+                rep_to_update.executive_summary = research_state.get("final_answer")
+                rep_to_update.findings = serialized_findings
+                rep_to_update.content = markdown_content
+                rep_to_update.citations = serialized_citations
+                rep_to_update.status = "completed" if (guardrails_result and guardrails_result.passed) else "failed"
+                if guardrails_result and not guardrails_result.passed:
+                    rep_to_update.error_message = "Guardrails validation failed on generated response"
+                await session.commit()
+
+        duration = time.perf_counter() - start_time
+        logger.info(
+            "Successfully completed financial research report '%s' in %.4fs [job_id=%s]",
+            rep_uuid,
+            duration,
+            job_id,
+        )
+        return {
+            "status": "completed",
+            "report_id": str(rep_uuid),
+            "findings_count": len(serialized_findings),
+            "citations_count": len(serialized_citations),
+            "duration_seconds": round(duration, 4),
+        }
+
+    except Exception as exc:
+        duration = time.perf_counter() - start_time
+        logger.exception("Failed during report generation for '%s' in job [%s]: %s", rep_uuid, job_id, exc)
+
+        async with async_session() as err_session:
+            result = await err_session.execute(select(Report).where(Report.id == rep_uuid))
+            rep_to_fail = result.scalar_one_or_none()
+            if rep_to_fail:
+                rep_to_fail.status = "failed"
+                rep_to_fail.error_message = str(exc)[:500]
+                await err_session.commit()
+
+        return {
+            "status": "failed",
+            "report_id": str(rep_uuid),
+            "error": str(exc)[:500],
+            "duration_seconds": round(duration, 4),
+        }

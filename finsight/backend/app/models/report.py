@@ -17,31 +17,57 @@ class Report(Base):
         default=uuid.uuid4,
     )
 
+    title: Mapped[str] = mapped_column(
+        String(255),
+        default="Financial Research Report",
+        nullable=False,
+    )
+
     query: Mapped[str] = mapped_column(
         Text,
         nullable=False,
     )
 
-    response: Mapped[str] = mapped_column(
-        Text,
-        nullable=False,
-    )
-
-    sources: Mapped[dict | None] = mapped_column(
-        JSONB,
-        nullable=True,
-    )
-
     report_type: Mapped[str] = mapped_column(
         String(50),
-        default="analysis",
+        default="financial_research",
         nullable=False,
     )
 
     status: Mapped[str] = mapped_column(
         String(50),
-        default="completed",
+        default="pending",
         nullable=False,
+    )
+
+    document_ids: Mapped[list[uuid.UUID] | None] = mapped_column(
+        JSONB,
+        nullable=True,
+    )
+
+    executive_summary: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    findings: Mapped[list[dict] | None] = mapped_column(
+        JSONB,
+        nullable=True,
+    )
+
+    content: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    citations: Mapped[list[dict] | None] = mapped_column(
+        JSONB,
+        nullable=True,
+    )
+
+    error_message: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -50,5 +76,12 @@ class Report(Base):
         nullable=False,
     )
 
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
+    )
+
     def __repr__(self) -> str:
-        return f"<Report(id={self.id}, type='{self.report_type}')>"
+        return f"<Report(id={self.id}, title='{self.title}', status='{self.status}')>"

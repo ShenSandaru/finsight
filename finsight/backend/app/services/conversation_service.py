@@ -211,6 +211,7 @@ class ConversationService:
         top_k: int = settings.RAG_DEFAULT_TOP_K,
         min_similarity: float = settings.RAG_MIN_RELEVANCE_SCORE,
         document_id: UUID | None = None,
+        document_ids: list[UUID] | None = None,
         db: AsyncSession | None = None,
     ) -> ConversationQueryResponse:
         """
@@ -267,6 +268,7 @@ class ConversationService:
                 top_k=top_k,
                 min_similarity=min_similarity,
                 document_id=document_id,
+                document_ids=document_ids,
                 db=db,
             )
             final_answer = rag_response.answer
@@ -279,6 +281,7 @@ class ConversationService:
                 standalone_query=resolved_retrieval_query,
                 session_id=session_id,
                 document_id=document_id,
+                document_ids=document_ids,
                 top_k=top_k,
                 min_similarity=min_similarity,
             )

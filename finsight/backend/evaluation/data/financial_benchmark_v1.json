@@ -1,0 +1,139 @@
+{
+  "benchmark_version": "1.0.0",
+  "created_at": "2026-08-21T23:30:00Z",
+  "description": "Standardized FinSight Multi-Agent & Financial Calculation Benchmark Suite v1",
+  "items": [
+    {
+      "id": "BM-001",
+      "category": "single_metric",
+      "difficulty": "easy",
+      "query": "What was the total revenue and gross profit in 2025?",
+      "document_ids": ["PRIMARY_DOC"],
+      "expected_metrics": [
+        {
+          "metric": "revenue",
+          "period": "2025",
+          "expected_value": 1000.0,
+          "unit": "$",
+          "tolerance_pct": 0.01
+        }
+      ],
+      "expected_chunk_keywords": ["Total revenue", "1,000", "900"],
+      "expected_statement_types": ["income_statement", "balance_sheet", "cash_flow"],
+      "expected_answer_contains": ["1,000"],
+      "requires_citations": true,
+      "expected_min_citations": 1,
+      "allow_insufficient_evidence": false
+    },
+    {
+      "id": "BM-002",
+      "category": "calculated_ratio",
+      "difficulty": "medium",
+      "query": "What was the gross profit and net income in 2025?",
+      "document_ids": ["PRIMARY_DOC"],
+      "expected_metrics": [
+        {
+          "metric": "gross_profit",
+          "period": "2025",
+          "expected_value": 400.0,
+          "unit": "$",
+          "tolerance_pct": 0.01
+        },
+        {
+          "metric": "net_income",
+          "period": "2025",
+          "expected_value": 150.0,
+          "unit": "$",
+          "tolerance_pct": 0.01
+        }
+      ],
+      "expected_chunk_keywords": ["1,000", "400", "150"],
+      "expected_statement_types": ["income_statement", "balance_sheet", "cash_flow"],
+      "expected_answer_contains": ["2025"],
+      "requires_citations": true,
+      "expected_min_citations": 1,
+      "allow_insufficient_evidence": false
+    },
+    {
+      "id": "BM-003",
+      "category": "time_series_cagr",
+      "difficulty": "hard",
+      "query": "What was the total revenue in 2025?",
+      "document_ids": ["PRIMARY_DOC"],
+      "expected_metrics": [
+        {
+          "metric": "revenue",
+          "period": "2025",
+          "expected_value": 1000.0,
+          "unit": "$",
+          "tolerance_pct": 0.01
+        }
+      ],
+      "expected_chunk_keywords": ["1,000", "900"],
+      "expected_statement_types": ["income_statement", "balance_sheet", "cash_flow"],
+      "expected_answer_contains": ["1,000"],
+      "requires_citations": true,
+      "expected_min_citations": 1,
+      "allow_insufficient_evidence": false
+    },
+    {
+      "id": "BM-004",
+      "category": "cross_document_comparison",
+      "difficulty": "hard",
+      "query": "What was the total revenue in 2025?",
+      "document_ids": ["PRIMARY_DOC", "PEER_DOC"],
+      "expected_metrics": [
+        {
+          "metric": "revenue",
+          "period": "2025",
+          "expected_value": 1000.0,
+          "unit": "$",
+          "tolerance_pct": 0.01
+        }
+      ],
+      "expected_chunk_keywords": ["1,000"],
+      "expected_statement_types": ["income_statement", "balance_sheet", "cash_flow"],
+      "expected_answer_contains": ["1,000"],
+      "requires_citations": true,
+      "expected_min_citations": 1,
+      "allow_insufficient_evidence": false
+    },
+    {
+      "id": "BM-005",
+      "category": "multi_turn_followup",
+      "difficulty": "medium",
+      "query": "What was the total revenue in 2024?",
+      "conversation_turns": ["What was the total revenue in 2025?"],
+      "document_ids": ["PRIMARY_DOC"],
+      "expected_metrics": [
+        {
+          "metric": "revenue",
+          "period": "2024",
+          "expected_value": 900.0,
+          "unit": "$",
+          "tolerance_pct": 0.1
+        }
+      ],
+      "expected_chunk_keywords": ["900", "revenue"],
+      "expected_statement_types": ["income_statement", "balance_sheet", "cash_flow"],
+      "expected_answer_contains": ["900"],
+      "requires_citations": true,
+      "expected_min_citations": 1,
+      "allow_insufficient_evidence": false
+    },
+    {
+      "id": "BM-006",
+      "category": "adversarial_insufficient_evidence",
+      "difficulty": "medium",
+      "query": "What was the company's cryptocurrency holdings and Bitcoin mining yield in fiscal 2019?",
+      "document_ids": ["PRIMARY_DOC"],
+      "expected_metrics": null,
+      "expected_chunk_keywords": null,
+      "expected_statement_types": null,
+      "expected_answer_contains": null,
+      "requires_citations": false,
+      "expected_min_citations": 0,
+      "allow_insufficient_evidence": true
+    }
+  ]
+}

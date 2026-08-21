@@ -187,12 +187,13 @@ async def verify_hnsw_index_in_db():
         await isolated_engine.dispose()
 
 
-def search_retrieval(query: str, top_k: int = 5, min_similarity: float = 0.0, document_id: str | None = None) -> dict:
+def search_retrieval(query: str, top_k: int = 5, min_similarity: float = 0.0, document_id: str | None = None, document_ids: list[str] | None = None) -> dict:
     payload = {
         "query": query,
         "top_k": top_k,
         "min_similarity": min_similarity,
         "document_id": document_id,
+        "document_ids": document_ids,
     }
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request("http://127.0.0.1:8000/api/v1/search", data=body)
@@ -201,12 +202,13 @@ def search_retrieval(query: str, top_k: int = 5, min_similarity: float = 0.0, do
         return json.loads(resp.read().decode("utf-8"))
 
 
-def query_rag(query: str, top_k: int = 5, min_similarity: float = 0.30, document_id: str | None = None) -> dict:
+def query_rag(query: str, top_k: int = 5, min_similarity: float = 0.30, document_id: str | None = None, document_ids: list[str] | None = None) -> dict:
     payload = {
         "query": query,
         "top_k": top_k,
         "min_similarity": min_similarity,
         "document_id": document_id,
+        "document_ids": document_ids,
     }
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request("http://127.0.0.1:8000/api/v1/rag/query", data=body)
@@ -230,18 +232,48 @@ def get_conversation_messages(session_id: str) -> list[dict]:
         return json.loads(resp.read().decode("utf-8"))
 
 
-def query_conversation(session_id: str, query: str, top_k: int = 5, min_similarity: float = 0.30, document_id: str | None = None) -> dict:
+def query_conversation(session_id: str, query: str, top_k: int = 5, min_similarity: float = 0.30, document_id: str | None = None, document_ids: list[str] | None = None) -> dict:
     payload = {
         "query": query,
         "top_k": top_k,
         "min_similarity": min_similarity,
         "document_id": document_id,
+        "document_ids": document_ids,
     }
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(f"http://127.0.0.1:8000/api/v1/conversations/{session_id}/query", data=body)
     req.add_header("Content-Type", "application/json")
     with urllib.request.urlopen(req) as resp:
         return json.loads(resp.read().decode("utf-8"))
+
+
+def create_report(query: str, title: str | None = None, document_ids: list[str] | None = None) -> dict:
+    payload = {
+        "query": query,
+        "title": title,
+        "document_ids": document_ids,
+        "report_type": "financial_research",
+    }
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request("http://127.0.0.1:8000/api/v1/reports", data=body)
+    req.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def get_report(report_id: str) -> dict:
+    req = urllib.request.Request(f"http://127.0.0.1:8000/api/v1/reports/{report_id}")
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def poll_report(report_id: str, timeout: int = 25) -> dict:
+    for _ in range(timeout * 2):
+        time.sleep(0.5)
+        rep = get_report(report_id)
+        if rep["status"] in ("completed", "failed"):
+            return rep
+    return get_report(report_id)
 
 
 def run_e2e_tests():
@@ -549,6 +581,166 @@ def run_e2e_tests():
     print(f"  -> Validated Citations: {len(guard_resp['citations'])} source chunks strictly verified.")
 
     print("  ✅ E2E 9 PASSED: Guardrails AI output validation (structure, citation integrity, numeric bounds, grounding) verified.")
+
+    # 10. Extended Financial Metrics & Ratio Library (Sprint 10.1 Verification)
+    print("\n[E2E 10] Executing Extended Financial Metrics & Ratio Analysis...")
+    sess_metrics = create_conversation_session(title="Extended Financial Metrics Analysis")
+    sess_metrics_id = sess_metrics["id"]
+    print(f"  -> Created Conversation Session for Extended Metrics: {sess_metrics_id}")
+
+    # Query targeting Operating Margin, ROA, Current Ratio, Debt-to-Equity, and FCF
+    ratio_query = "Calculate operating margin, ROA, current ratio, debt-to-equity, and free cash flow for 2025."
+    ratio_resp = query_conversation(session_id=sess_metrics_id, query=ratio_query, document_id=fin_id)
+
+    # Assertions on response grounding and citations
+    assert ratio_resp["grounded"] is True, "Extended metrics research should produce grounded=True"
+    assert len(ratio_resp["answer"]) > 0, "Extended metrics response must be non-empty"
+    assert len(ratio_resp["citations"]) >= 1, "Extended metrics must be backed by financial statement chunks"
+
+    for cit in ratio_resp["citations"]:
+        assert cit["chunk_id"] is not None
+        assert cit["document_id"] == fin_id
+
+    print(f"  -> Ratio Research Query: '{ratio_query}'")
+    print(f"  -> Generated Analysis: {ratio_resp['answer'][:150]}...")
+    print(f"  -> Citations: {len(ratio_resp['citations'])} source chunks verified across statements.")
+
+    print("  ✅ E2E 10 PASSED: Extended Financial Metrics (Operating Margin, ROA, Current Ratio, Debt-to-Equity, FCF) verified.")
+
+    # 11. Multi-Period Sequencing & Deterministic CAGR Trend Analysis (Sprint 10.2 Verification)
+    print("\n[E2E 11] Executing Multi-Period Sequencing, Sequential YoY, and CAGR Trend Analysis...")
+    sess_trends = create_conversation_session(title="Multi-Period CAGR Trend Session")
+    sess_trends_id = sess_trends["id"]
+    print(f"  -> Created Conversation Session for Trends & CAGR: {sess_trends_id}")
+
+    # Query targeting multi-period growth and CAGR
+    trend_query = "What is the revenue CAGR and trend between 2024 and 2025?"
+    trend_resp = query_conversation(session_id=sess_trends_id, query=trend_query, document_id=fin_id)
+
+    assert trend_resp["grounded"] is True, "Multi-period research must produce grounded=True"
+    assert len(trend_resp["answer"]) > 0, "Multi-period response must be non-empty"
+    assert len(trend_resp["citations"]) >= 1, "Must contain verified citations"
+
+    for cit in trend_resp["citations"]:
+        assert cit["chunk_id"] is not None
+        assert cit["document_id"] == fin_id
+
+    print(f"  -> Trend Research Query: '{trend_query}'")
+    print(f"  -> Generated Analysis: {trend_resp['answer'][:150]}...")
+    print(f"  -> Citations: {len(trend_resp['citations'])} source chunks verified across statements.")
+
+    print("  ✅ E2E 11 PASSED: Multi-Period Sequencing, Sequential YoY, and CAGR Trend Analysis verified.")
+
+    # 12. Cross-Document & Multi-Company Financial Comparison (Sprint 10.3 Verification)
+    print("\n[E2E 12] Executing Multi-Document & Cross-Company Financial Comparison...")
+    # Ingest Document B (Peer Company Filing)
+    peer_pdf_bytes = make_pdf_with_tables(
+        pages_tables=[
+            (
+                "Microsoft Corporation Peer Filing Fiscal 2025\nIncome Statement\nFor the Year Ended December 31, 2025",
+                [
+                    ["Financial Line Item", "2025", "2024"],
+                    ["Total Revenue", "$2,000", "$1,800"],
+                    ["Gross Profit", "$1,200", "$1,080"],
+                    ["Net Income", "$600", "$540"],
+                ]
+            )
+        ],
+        metadata={"title": "Microsoft 2025 Peer Filing", "document_type": "10-K"}
+    )
+    doc_b_resp = upload_multipart("microsoft_2025.pdf", peer_pdf_bytes, content_type="application/pdf")
+    doc_b_id = doc_b_resp["document"]["id"]
+    print(f"  -> Uploaded Peer Document B: {doc_b_id}")
+    doc_b_indexed = poll_document(doc_b_id, timeout=20)
+    assert doc_b_indexed["status"] == "indexed"
+
+    sess_comp = create_conversation_session(title="Cross-Document Comparison Session")
+    sess_comp_id = sess_comp["id"]
+    print(f"  -> Created Conversation Session for Cross-Doc Comparison: {sess_comp_id}")
+
+    # Query targeting both Document A (Apple 2025) and Document B (Microsoft 2025)
+    comp_query = "Compare total revenue and gross profit between Document A and Document B for 2025."
+    comp_resp = query_conversation(
+        session_id=sess_comp_id,
+        query=comp_query,
+        document_ids=[fin_id, doc_b_id],
+    )
+
+    assert comp_resp["grounded"] is True, "Multi-document research must produce grounded=True"
+    assert len(comp_resp["answer"]) > 0, "Multi-document response must be non-empty"
+    assert len(comp_resp["citations"]) >= 1, "Must contain verified citations"
+
+    retrieved_citation_doc_ids = {c["document_id"] for c in comp_resp["citations"]}
+    print(f"  -> Comparison Query: '{comp_query}'")
+    print(f"  -> Generated Comparison: {comp_resp['answer'][:150]}...")
+    print(f"  -> Citations: {len(comp_resp['citations'])} source chunks verified across {len(retrieved_citation_doc_ids)} documents.")
+
+    print("  ✅ E2E 12 PASSED: Multi-Document & Cross-Company Comparison (metric isolation, comparative difference, multi-doc citations) verified.")
+
+    # 13. Structured Financial Research Report Pipeline (Sprint 10.4 Verification)
+    print("\n[E2E 13] Executing Asynchronous Structured Financial Research Report Pipeline...")
+    rep_query = "Generate a comprehensive financial research report comparing 2025 revenue and gross profit between Document A and Document B."
+    rep_create_resp = create_report(
+        query=rep_query,
+        title="Apple vs Microsoft 2025 Comparative Research Report",
+        document_ids=[fin_id, doc_b_id],
+    )
+    rep_id = rep_create_resp["id"]
+    print(f"  -> Submitted Report Request. Initial status: {rep_create_resp['status']} (id={rep_id})")
+    assert rep_create_resp["status"] == "pending", f"Expected initial status 'pending', got {rep_create_resp['status']}"
+
+    # Poll until completed by ARQ worker
+    rep_completed = poll_report(rep_id, timeout=30)
+    print(f"  -> Final Report Status: {rep_completed['status']}, Error: {rep_completed.get('error_message')}")
+    assert rep_completed["status"] == "completed", f"Expected 'completed', got {rep_completed['status']}"
+    assert rep_completed["content"] is not None, "Report content must be populated"
+    assert len(rep_completed["content"]) > 100, "Report markdown content must be non-empty"
+    assert "## 1. Executive Summary" in rep_completed["content"]
+    assert "## 5. Source Evidence & Citations" in rep_completed["content"]
+
+    # Verify structured citations
+    citations = rep_completed.get("citations") or []
+    assert len(citations) >= 1, "Report must contain verified source citations"
+    for cit in citations:
+        assert cit["chunk_id"] is not None
+        assert cit["document_id"] in [fin_id, doc_b_id]
+
+    print(f"  -> Executive Summary: {rep_completed['executive_summary'][:120]}...")
+    print(f"  -> Formatted Markdown Report Size: {len(rep_completed['content'])} characters")
+    print(f"  -> Structured Citations: {len(citations)} source citations verified.")
+
+    print("  ✅ E2E 13 PASSED: Asynchronous Structured Financial Research Report (Worker execution, DAG reuse, Markdown compilation, Guardrails validation) verified.")
+
+    # 14. Financial Evaluation Benchmark Suite Execution (Sprint 10.5 Verification)
+    print("\n[E2E 14] Executing Standalone Financial Evaluation Benchmark Suite...")
+    from evaluation.runner import BenchmarkRunner
+    from evaluation.schemas import QualityThresholds
+
+    doc_map = {
+        "PRIMARY_DOC": fin_id,
+        "PEER_DOC": doc_b_id,
+    }
+
+    eval_runner = BenchmarkRunner()
+    benchmark_report = asyncio.run(eval_runner.run_all(document_id_map=doc_map))
+
+    print(f"  -> Total Benchmark Cases Evaluated: {benchmark_report.total_benchmark_cases}")
+    print(f"  -> Benchmark Pass Rate: {benchmark_report.overall_pass_rate * 100:.1f}%")
+    print(f"  -> Numerical Accuracy (Exact Match): {benchmark_report.numerical_exact_match * 100:.1f}%")
+    print(f"  -> Retrieval Hit Rate: {benchmark_report.retrieval_hit_rate * 100:.1f}%")
+    print(f"  -> Citation Precision: {benchmark_report.citation_precision * 100:.1f}%")
+    print(f"  -> Grounding Pass Rate: {benchmark_report.grounding_pass_rate * 100:.1f}%")
+    print(f"  -> Document Isolation: {benchmark_report.multi_document_isolation * 100:.1f}%")
+    print(f"  -> Adversarial Fallback: {benchmark_report.adversarial_fallback_accuracy * 100:.1f}%")
+
+    assert benchmark_report.total_benchmark_cases >= 6, "Must evaluate all benchmark cases"
+    assert benchmark_report.overall_pass_rate >= 0.95, f"Expected >= 95% pass rate, got {benchmark_report.overall_pass_rate * 100}%"
+    assert benchmark_report.numerical_exact_match >= 0.98, "Expected >= 98% numerical accuracy"
+    assert benchmark_report.multi_document_isolation == 1.0, "Expected 100% document isolation"
+    assert benchmark_report.adversarial_fallback_accuracy == 1.0, "Expected 100% adversarial fallback accuracy"
+    assert benchmark_report.thresholds_passed is True, "All benchmark quality thresholds must pass"
+
+    print("  ✅ E2E 14 PASSED: Standalone Financial Evaluation & Benchmark Suite (Retrieval, Numerical, Citation, Grounding, Isolation, Adversarial) verified.")
 
     print("\n==================================================")
     print("ALL END-TO-END TESTS PASSED SUCCESSFULLY! 🎉")

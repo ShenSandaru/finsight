@@ -16,7 +16,7 @@ from app.core.exceptions import (
     ExternalServiceError,
 )
 from app.schemas.error import ErrorResponse, ErrorDetail
-from app.api.routes import documents, tasks, search, rag, conversations
+from app.api.routes import documents, tasks, search, rag, conversations, reports
 
 logger = logging.getLogger("finsight.api")
 settings = get_settings()
@@ -149,6 +149,7 @@ app.include_router(tasks.router, prefix="/api/v1")
 app.include_router(search.router, prefix="/api/v1")
 app.include_router(rag.router, prefix="/api/v1")
 app.include_router(conversations.router, prefix="/api/v1")
+app.include_router(reports.router, prefix="/api/v1")
 
 
 @app.get("/health")
