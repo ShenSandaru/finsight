@@ -480,7 +480,7 @@ class TestRetrievalDatabaseIntegration:
                 pass
 
         service = RetrievalService(embedding_service=MockEmbService(), session_factory=db_session_factory)
-        results = await service.search("Query", min_similarity=0.8, document_id=doc_id)
+        results = await service.search("Threshold query", top_k=5, min_similarity=0.5, document_id=doc_id)
         assert len(results) == 0
 
         # Cleanup
@@ -489,6 +489,55 @@ class TestRetrievalDatabaseIntegration:
             if doc_obj:
                 await session.delete(doc_obj)
                 await session.commit()
+
+    async def test_18b_multi_document_ids_filtering(self, db_session_factory):
+        """Sprint 10.3: Test multi-document filtering and isolation across Documents A, B, and C."""
+        doc_a_id = uuid.uuid4()
+        doc_b_id = uuid.uuid4()
+        doc_c_id = uuid.uuid4()
+        v = create_deterministic_unit_vector(0)
+
+        async with db_session_factory() as session:
+            doc_a = Document(id=doc_a_id, filename="doc_a.pdf", file_type="pdf", file_size=1000, status="indexed", total_chunks=1)
+            doc_b = Document(id=doc_b_id, filename="doc_b.pdf", file_type="pdf", file_size=1000, status="indexed", total_chunks=1)
+            doc_c = Document(id=doc_c_id, filename="doc_c.pdf", file_type="pdf", file_size=1000, status="indexed", total_chunks=1)
+            
+            c_a = Chunk(document_id=doc_a_id, content="Doc A Content", chunk_type="text", chunk_index=0, page_number=1, embedding=v)
+            c_b = Chunk(document_id=doc_b_id, content="Doc B Content", chunk_type="text", chunk_index=0, page_number=1, embedding=v)
+            c_c = Chunk(document_id=doc_c_id, content="Doc C Content", chunk_type="text", chunk_index=0, page_number=1, embedding=v)
+
+            session.add_all([doc_a, doc_b, doc_c, c_a, c_b, c_c])
+            await session.commit()
+
+        class MockEmbService:
+            async def embed_query(self, query: str) -> list[float]:
+                return v
+
+            async def close(self):
+                pass
+
+        service = RetrievalService(embedding_service=MockEmbService(), session_factory=db_session_factory)
+        
+        # 1. Search with document_ids=[doc_a_id, doc_b_id] -> only A and B returned, C never returned
+        results = await service.search("Multi-doc query", top_k=5, document_ids=[doc_a_id, doc_b_id])
+        assert len(results) == 2
+        retrieved_doc_ids = {r.document_id for r in results}
+        assert doc_a_id in retrieved_doc_ids
+        assert doc_b_id in retrieved_doc_ids
+        assert doc_c_id not in retrieved_doc_ids
+
+        # 2. Backward compatibility: single document_id filter
+        single_results = await service.search("Single doc query", top_k=5, document_id=doc_c_id)
+        assert len(single_results) == 1
+        assert single_results[0].document_id == doc_c_id
+
+        # Cleanup
+        async with db_session_factory() as session:
+            for d_id in [doc_a_id, doc_b_id, doc_c_id]:
+                d_obj = await session.get(Document, d_id)
+                if d_obj:
+                    await session.delete(d_obj)
+            await session.commit()
 
 
 @pytest.mark.asyncio

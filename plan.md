@@ -408,7 +408,7 @@ flowchart TD
 ### Phase 10 — Advanced Financial Research Capabilities & Report Endpoints
 * **Goal:** Extend research capabilities with cross-company filing comparisons, deep financial ratio analysis, and asynchronous long-form research report endpoints.
 * **Why Needed:** Enable analysts to run deep comparative financial research across multiple documents and export structured reports.
-* **Current Status:** **Sprint 10.1 & 10.2 COMPLETE & VERIFIED (Extended Metrics, Time-Series & CAGR Analysis)**.
+* **Current Status:** **Sprint 10.1, 10.2 & 10.3 COMPLETE & VERIFIED (Extended Metrics, Time-Series/CAGR, Cross-Document Comparison)**.
 * **Tasks:**
   - [x] Extend `FinancialAnalyzerNode` (`backend/app/agents/financial_analyzer.py`) with deterministic metric extraction and ratio calculations (Sprint 10.1):
     - [x] Operating Margin: `(operating_income / revenue) * 100` (`%`)
@@ -425,21 +425,39 @@ flowchart TD
     - [x] Multi-period Compound Annual Growth Rate (CAGR) with elapsed-year exponent $N = p_{\text{end}} - p_{\text{start}}$.
     - [x] Deterministic trend direction classification (`Consistent Increase`, `Consistent Decrease`, `Flat`, `Volatile`, `Incomplete Series`).
     - [x] Complete multi-period source provenance aggregation.
-  - [x] Unit and edge-case test suite passing (227 total pytest tests, 100% pass rate) (Sprint 10.1 & 10.2).
-  - [x] Docker E2E test suite updated with Scenario 11 (Multi-Period CAGR & Trend Analysis) passing (11/11 E2E scenarios) (Sprint 10.2).
-  - [x] Create developer documentation in `docs/development/financial-metrics.md` and `docs/development/trend-analysis.md`.
-  - [ ] Multi-Document & Cross-Company Comparison (Sprint 10.3).
+  - [x] Multi-Document & Cross-Company Comparison (Sprint 10.3):
+    - [x] Multi-document vector retrieval filtering (`RetrievalService.search(document_ids=[...])` using pgvector in-database `.in_()`).
+    - [x] Schema extensions for `document_ids: list[UUID] | None` on `SearchRequest`, `RAGRequest`, `ConversationQueryRequest`, `ResearchState`, and `document_id: UUID | None` on `FinancialFinding`.
+    - [x] Document-scoped metric isolation in `FinancialAnalyzerNode` (grouping raw metrics strictly by `(document_id, period, metric)`).
+    - [x] Deterministic cross-document absolute difference ($\text{Doc B} - \text{Doc A}$) and percentage difference ($((\text{Doc B} - \text{Doc A}) / |\text{Doc A}|) \times 100$).
+    - [x] Merged dual provenance (`source_chunk_ids` containing evidence from both compared filings).
+    - [x] Citation auditing and deterministic Guardrails output validation across multi-document responses.
+  - [x] Unit and edge-case test suite passing (229 total pytest tests, 100% pass rate) (Sprint 10.1, 10.2 & 10.3).
+  - [x] Docker E2E test suite updated with Scenario 12 (Multi-Document & Cross-Company Comparison) passing (12/12 E2E scenarios) (Sprint 10.3).
+  - [x] Create developer documentation in `docs/development/financial-metrics.md`, `docs/development/trend-analysis.md`, and `docs/development/cross-document-comparison.md`.
   - [ ] Structured Financial Research Reports & REST Endpoints (Sprint 10.4).
   - [ ] Financial Evaluation & Benchmark Suite (Sprint 10.5).
 * **Files Affected:**
+  - `backend/app/services/retrieval_service.py`
+  - `backend/app/schemas/search.py`
+  - `backend/app/schemas/rag.py`
+  - `backend/app/schemas/conversation.py`
+  - `backend/app/agents/state.py`
+  - `backend/app/agents/retriever.py`
+  - `backend/app/agents/graph.py`
+  - `backend/app/services/rag_service.py`
+  - `backend/app/services/conversation_service.py`
+  - `backend/app/api/routes/search.py`
+  - `backend/app/api/routes/rag.py`
+  - `backend/app/api/routes/conversations.py`
   - `backend/app/agents/financial_analyzer.py`
+  - `backend/tests/test_retrieval_service.py`
   - `backend/tests/test_agent_system.py`
   - `backend/tests/e2e_test.py`
-  - `docs/development/financial-metrics.md`
-  - `docs/development/trend-analysis.md`
+  - `docs/development/cross-document-comparison.md`
   - `plan.md`
 * **Acceptance Criteria:**
-  - Financial questions requesting Operating Margin, ROA, Current Ratio, Debt-to-Equity, FCF, Multi-Period CAGR, and Trend Direction calculate deterministically in Python; multi-chunk source provenance is preserved; 227 backend tests and 11 Docker E2E scenarios pass cleanly.
+  - Multi-document retrieval strictly filters chunks by selected document IDs; metrics from different documents remain completely isolated without cross-contamination; deterministic comparative differences calculate in Python; multi-document citations validate through CitationAuditor and Guardrails; 229 backend tests and 12 Docker E2E scenarios pass cleanly.
 
 ---
 

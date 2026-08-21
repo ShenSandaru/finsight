@@ -161,6 +161,7 @@ class RAGService:
         top_k: int = settings.RAG_DEFAULT_TOP_K,
         min_similarity: float | None = None,
         document_id: UUID | None = None,
+        document_ids: list[UUID] | None = None,
         db: AsyncSession | None = None,
     ) -> RAGResponse:
         """
@@ -198,6 +199,7 @@ class RAGService:
             top_k=top_k,
             min_similarity=threshold,
             document_id=document_id,
+            document_ids=document_ids,
             db=db,
         )
 

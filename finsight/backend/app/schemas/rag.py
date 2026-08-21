@@ -11,6 +11,7 @@ class RAGRequest(BaseModel):
     top_k: int = Field(5, ge=1, le=20, description="Maximum number of chunks to retrieve for context assembly")
     min_similarity: float = Field(0.30, ge=0.0, le=1.0, description="Minimum similarity relevance score threshold")
     document_id: UUID | None = Field(None, description="Optional document UUID filter to restrict research scope")
+    document_ids: list[UUID] | None = Field(None, description="Optional list of document UUIDs for multi-document filtering")
 
 
 class CitationResponse(BaseModel):

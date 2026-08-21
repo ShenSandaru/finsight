@@ -34,6 +34,7 @@ async def query_rag(
             top_k=request.top_k,
             min_similarity=request.min_similarity,
             document_id=request.document_id,
+            document_ids=request.document_ids,
             db=db,
         )
 

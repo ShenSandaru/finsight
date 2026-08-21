@@ -24,7 +24,7 @@ class MockRetrievalService:
         self.sample_results = sample_results or []
         self.searched_queries = []
 
-    async def search(self, query: str, top_k: int = 5, min_similarity: float = 0.0, document_id=None, db=None) -> list[RetrievalResult]:
+    async def search(self, query: str, top_k: int = 5, min_similarity: float = 0.0, document_id=None, document_ids=None, db=None) -> list[RetrievalResult]:
         self.searched_queries.append(query)
         return self.sample_results
 
@@ -382,9 +382,10 @@ class TestFinancialAnalyzerNode:
         chunk2_id = uuid.uuid4()
 
         # Input text arrives with unordered years: 2025, 2022, 2024, 2023
+        doc_id = uuid.uuid4()
         chunk1 = RetrievalResult(
             chunk_id=chunk1_id,
-            document_id=uuid.uuid4(),
+            document_id=doc_id,
             content=(
                 "Historical Revenue Operations\n"
                 "Years 2025 2022\n"
@@ -398,7 +399,7 @@ class TestFinancialAnalyzerNode:
         )
         chunk2 = RetrievalResult(
             chunk_id=chunk2_id,
-            document_id=uuid.uuid4(),
+            document_id=doc_id,
             content=(
                 "Historical Revenue Operations\n"
                 "Years 2024 2023\n"
@@ -562,6 +563,89 @@ class TestFinancialAnalyzerNode:
         # Operating Income: 2023: 90 -> 2024: 120 -> 2025: 100 => Volatile
         op_trend = [f for f in findings if f.metric == "operating_income_trend"][0]
         assert "Volatile" in op_trend.calculation
+
+    async def test_05g_cross_document_isolation_and_comparison(self):
+        """Sprint 10.3: Test that metrics from Document A and Document B remain isolated, and comparison is computed."""
+        id1 = uuid.uuid4()
+        id2 = uuid.uuid4()
+        doc_a_id, doc_b_id = (id1, id2) if str(id1) < str(id2) else (id2, id1)
+        chunk_a_id = uuid.uuid4()
+        chunk_b_id = uuid.uuid4()
+
+        chunk_a = RetrievalResult(
+            chunk_id=chunk_a_id,
+            document_id=doc_a_id,
+            content=(
+                "Company A Financial Statements\n"
+                "Year Ended December 31, 2025\n"
+                "Total Revenue: $100\n"
+                "Net Income: $20"
+            ),
+            chunk_type="table",
+            chunk_index=0,
+            page_number=1,
+            similarity=0.92,
+            metadata={},
+        )
+        chunk_b = RetrievalResult(
+            chunk_id=chunk_b_id,
+            document_id=doc_b_id,
+            content=(
+                "Company B Financial Statements\n"
+                "Year Ended December 31, 2025\n"
+                "Total Revenue: $150\n"
+                "Net Income: $45"
+            ),
+            chunk_type="table",
+            chunk_index=0,
+            page_number=1,
+            similarity=0.91,
+            metadata={},
+        )
+
+        state: ResearchState = {
+            "original_query": "Compare Company A and Company B revenue in 2025",
+            "standalone_query": "Compare Company A and Company B revenue in 2025",
+            "sub_queries": [],
+            "retrieved_chunks": [chunk_a, chunk_b],
+            "session_id": None,
+            "document_id": None,
+            "document_ids": [doc_a_id, doc_b_id],
+            "top_k": 5,
+            "min_similarity": 0.0,
+            "findings": [],
+            "citation_audit": None,
+            "guardrails_validation": None,
+            "final_answer": None,
+            "citations": [],
+            "grounded": False,
+            "step_count": 2,
+            "status": "retrieved",
+            "error": None,
+        }
+
+        res = await FinancialAnalyzerNode.analyze(state)
+        findings = res["findings"]
+
+        # 1. Verify metric isolation: Doc A and Doc B revenue findings exist independently
+        rev_a = [f for f in findings if f.metric == "revenue" and f.document_id == doc_a_id][0]
+        rev_b = [f for f in findings if f.metric == "revenue" and f.document_id == doc_b_id][0]
+        assert rev_a.value == 100.0
+        assert rev_b.value == 150.0
+
+        # 2. Verify deterministic comparison calculations
+        # Absolute Difference: 150 - 100 = 50.0
+        abs_diff = [f for f in findings if f.metric == "revenue_absolute_difference" and f.period == "2025_docB_vs_docA"][0]
+        assert abs_diff.value == 50.0
+        assert chunk_a_id in abs_diff.source_chunk_ids
+        assert chunk_b_id in abs_diff.source_chunk_ids
+
+        # Percentage Difference: ((150 - 100) / 100) * 100 = 50.0%
+        pct_diff = [f for f in findings if f.metric == "revenue_comparison" and f.period == "2025_docB_vs_docA"][0]
+        assert pct_diff.value == 50.0
+        assert pct_diff.unit == "%"
+        assert chunk_a_id in pct_diff.source_chunk_ids
+        assert chunk_b_id in pct_diff.source_chunk_ids
 
 
 @pytest.mark.asyncio

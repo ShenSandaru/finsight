@@ -17,10 +17,11 @@ class FinancialAnalyzerNode:
     """
 
     @classmethod
-    def extract_metrics_from_text(cls, content: str, chunk_id: UUID) -> list[FinancialFinding]:
+    def extract_metrics_from_text(cls, content: str, chunk_id: UUID, document_id: UUID | None = None) -> list[FinancialFinding]:
         """
         Extract numerical financial figures from table or text chunk content.
         Looks for standard financial rows like Revenue, Gross Profit, Net Income, Operating Cash Flow.
+        Associates each finding with its owning document_id.
         """
         findings: list[FinancialFinding] = []
         lines = content.split("\n")
@@ -66,8 +67,6 @@ class FinancialAnalyzerNode:
 
             if metric_name:
                 # Extract numeric values with dollar signs, parentheses (negative values), or numbers
-                # e.g., "$1,000", "(400)", "-400", "1000", "$900"
-                # Check for parenthesized negative numbers first: e.g. (400) or $(400)
                 num_matches = re.findall(r"(?:-|\$?\s*\()?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]+)?)\s*\)?", line)
                 raw_tokens = re.findall(r"(\(?\$?\s*-?[0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]+)?\s*\)?)", line)
 
@@ -96,6 +95,7 @@ class FinancialAnalyzerNode:
                                     period=p,
                                     value=val,
                                     unit="$",
+                                    document_id=document_id,
                                     source_chunk_ids=[chunk_id],
                                 )
                             )
@@ -108,6 +108,7 @@ class FinancialAnalyzerNode:
                                 period=period_found,
                                 value=clean_numbers[0],
                                 unit="$",
+                                document_id=document_id,
                                 source_chunk_ids=[chunk_id],
                             )
                         )
@@ -115,10 +116,9 @@ class FinancialAnalyzerNode:
         return findings
 
     @classmethod
-    def compute_ratios_and_growth(cls, findings: list[FinancialFinding]) -> list[FinancialFinding]:
+    def compute_ratios_and_growth_for_doc(cls, findings: list[FinancialFinding], doc_id: UUID | None) -> list[FinancialFinding]:
         """
-        Deterministically compute Financial Ratios (Gross/Net/Operating Margins, ROA, Current Ratio, Debt-to-Equity, FCF)
-        and YoY Growth rates using Python arithmetic.
+        Deterministically compute single-document financial ratios, YoY, CAGR, and Trend Direction.
         """
         derived_findings: list[FinancialFinding] = []
         by_period: dict[str, dict[str, FinancialFinding]] = {}
@@ -126,7 +126,6 @@ class FinancialAnalyzerNode:
         for f in findings:
             if f.period not in by_period:
                 by_period[f.period] = {}
-            # Prefer first extracted finding per metric per period
             if f.metric not in by_period[f.period]:
                 by_period[f.period][f.metric] = f
 
@@ -154,6 +153,7 @@ class FinancialAnalyzerNode:
                         period=period,
                         value=gross_margin,
                         unit="%",
+                        document_id=doc_id,
                         source_chunk_ids=sources,
                         calculation=f"({gp.value} / {rev.value}) * 100",
                     )
@@ -169,6 +169,7 @@ class FinancialAnalyzerNode:
                         period=period,
                         value=operating_margin,
                         unit="%",
+                        document_id=doc_id,
                         source_chunk_ids=sources,
                         calculation=f"({op_inc.value} / {rev.value}) * 100",
                     )
@@ -184,6 +185,7 @@ class FinancialAnalyzerNode:
                         period=period,
                         value=net_margin,
                         unit="%",
+                        document_id=doc_id,
                         source_chunk_ids=sources,
                         calculation=f"({ni.value} / {rev.value}) * 100",
                     )
@@ -199,6 +201,7 @@ class FinancialAnalyzerNode:
                         period=period,
                         value=roa,
                         unit="%",
+                        document_id=doc_id,
                         source_chunk_ids=sources,
                         calculation=f"({ni.value} / {assets.value}) * 100",
                     )
@@ -214,6 +217,7 @@ class FinancialAnalyzerNode:
                         period=period,
                         value=current_ratio,
                         unit="ratio",
+                        document_id=doc_id,
                         source_chunk_ids=sources,
                         calculation=f"{curr_assets.value} / {curr_liab.value}",
                     )
@@ -229,13 +233,13 @@ class FinancialAnalyzerNode:
                         period=period,
                         value=debt_to_equity,
                         unit="ratio",
+                        document_id=doc_id,
                         source_chunk_ids=sources,
                         calculation=f"{liab.value} / {equity.value}",
                     )
                 )
 
             # G. Free Cash Flow (FCF) ($)
-            # Handle CapEx whether reported as positive (outflow) or negative (accounting bracketed)
             if ocf and capex:
                 capex_abs = abs(capex.value)
                 fcf = round(ocf.value - capex_abs, 2)
@@ -246,17 +250,16 @@ class FinancialAnalyzerNode:
                         period=period,
                         value=fcf,
                         unit="$",
+                        document_id=doc_id,
                         source_chunk_ids=sources,
                         calculation=f"{ocf.value} - {capex_abs}",
                     )
                 )
 
         # 2. Multi-Period Sequencing, Sequential YoY, CAGR, and Trend Direction
-        # Filter strictly for 4-digit annual periods (e.g. 2022, 2023, 2024, 2025) and exclude quarterly tokens
         annual_periods = sorted([int(p) for p in by_period.keys() if p.isdigit() and len(p) == 4])
 
         if len(annual_periods) >= 2:
-            # Group metrics by metric name across chronologically sorted annual periods
             metric_series: dict[str, list[tuple[int, float, list[UUID]]]] = {}
             for yr in annual_periods:
                 yr_str = str(yr)
@@ -280,13 +283,13 @@ class FinancialAnalyzerNode:
                                 period=f"{curr_yr}_vs_{prev_yr}",
                                 value=growth,
                                 unit="%",
+                                document_id=doc_id,
                                 source_chunk_ids=pair_sources,
                                 calculation=f"(({val_curr} - {val_prev}) / {abs(val_prev)}) * 100",
                             )
                         )
 
-                # B. Multi-Period CAGR (Compound Annual Growth Rate)
-                # Formula: ((Ending / Beginning) ^ (1 / N) - 1) * 100 where N = ending_year - beginning_year
+                # B. Multi-Period CAGR
                 first_yr, val_start, first_ids = series[0]
                 last_yr, val_end, last_ids = series[-1]
                 elapsed_years = last_yr - first_yr
@@ -307,6 +310,7 @@ class FinancialAnalyzerNode:
                                 period=f"{first_yr}_to_{last_yr}",
                                 value=cagr,
                                 unit="%",
+                                document_id=doc_id,
                                 source_chunk_ids=all_series_sources,
                                 calculation=calc_note,
                             )
@@ -318,19 +322,18 @@ class FinancialAnalyzerNode:
                                 period=f"{first_yr}_to_{last_yr}",
                                 value=-100.0,
                                 unit="%",
+                                document_id=doc_id,
                                 source_chunk_ids=all_series_sources,
                                 calculation=f"(({val_end} / {val_start}) ^ (1 / {elapsed_years}) - 1) * 100",
                             )
                         )
 
                 # C. Deterministic Trend Direction Classification
-                # Evaluated across >= 3 chronological points
                 if len(series) >= 3:
                     values = [v for _, v, _ in series]
                     all_series_sources = list(set(cid for _, _, ids in series for cid in ids))
                     missing_intermediate = (len(series) - 1) < elapsed_years
 
-                    # Check for consistent increase / decrease / flat / volatile
                     is_inc = all(values[k] > values[k - 1] for k in range(1, len(values)))
                     is_dec = all(values[k] < values[k - 1] for k in range(1, len(values)))
                     is_flat = all(abs(values[k] - values[0]) <= (0.005 * abs(values[0])) for k in range(1, len(values))) if values[0] != 0 else all(v == 0 for v in values)
@@ -354,12 +357,100 @@ class FinancialAnalyzerNode:
                             period=f"{first_yr}_to_{last_yr}",
                             value=1.0 if is_inc else (-1.0 if is_dec else 0.0),
                             unit="trend",
+                            document_id=doc_id,
                             source_chunk_ids=all_series_sources,
                             calculation=f"{trend_label}: [{val_sequence_str}]",
                         )
                     )
 
         return derived_findings
+
+    @classmethod
+    def compute_cross_document_comparisons(cls, all_findings: list[FinancialFinding]) -> list[FinancialFinding]:
+        """
+        Deterministically compare findings across different document_ids for the same (metric, period).
+        Generates absolute difference and percentage difference findings with merged source provenance.
+        """
+        comparisons: list[FinancialFinding] = []
+        # Group findings by (metric, period) across distinct document_ids
+        by_metric_period: dict[tuple[str, str], dict[UUID, FinancialFinding]] = {}
+
+        for f in all_findings:
+            # Skip existing comparisons or trend findings
+            if "_comparison" in f.metric or f.unit == "trend" or f.document_id is None:
+                continue
+            key = (f.metric, f.period)
+            if key not in by_metric_period:
+                by_metric_period[key] = {}
+            if f.document_id not in by_metric_period[key]:
+                by_metric_period[key][f.document_id] = f
+
+        for (metric_name, period), doc_map in by_metric_period.items():
+            doc_ids = sorted(list(doc_map.keys()), key=lambda d: str(d))
+            if len(doc_ids) >= 2:
+                # Compare each pair of documents: Doc B vs Doc A
+                for i in range(len(doc_ids)):
+                    for j in range(i + 1, len(doc_ids)):
+                        doc_a_id = doc_ids[i]
+                        doc_b_id = doc_ids[j]
+                        f_a = doc_map[doc_a_id]
+                        f_b = doc_map[doc_b_id]
+
+                        val_a = f_a.value
+                        val_b = f_b.value
+                        merged_sources = list(set(f_a.source_chunk_ids + f_b.source_chunk_ids))
+
+                        # 1. Absolute Difference: B - A
+                        abs_diff = round(val_b - val_a, 2)
+                        comparisons.append(
+                            FinancialFinding(
+                                metric=f"{metric_name}_absolute_difference",
+                                period=f"{period}_docB_vs_docA",
+                                value=abs_diff,
+                                unit=f_a.unit,
+                                source_chunk_ids=merged_sources,
+                                calculation=f"{val_b} - {val_a} [DocB ({str(doc_b_id)[:8]}) vs DocA ({str(doc_a_id)[:8]})]",
+                            )
+                        )
+
+                        # 2. Percentage Difference: ((B - A) / abs(A)) * 100
+                        if val_a != 0:
+                            pct_diff = round(((val_b - val_a) / abs(val_a)) * 100, 2)
+                            comparisons.append(
+                                FinancialFinding(
+                                    metric=f"{metric_name}_comparison",
+                                    period=f"{period}_docB_vs_docA",
+                                    value=pct_diff,
+                                    unit="%",
+                                    source_chunk_ids=merged_sources,
+                                    calculation=f"(({val_b} - {val_a}) / {abs(val_a)}) * 100 [DocB vs DocA]",
+                                )
+                            )
+
+        return comparisons
+
+    @classmethod
+    def compute_ratios_and_growth(cls, findings: list[FinancialFinding]) -> list[FinancialFinding]:
+        """
+        Group findings by document_id, calculate intra-document metrics, and then cross-document comparisons.
+        """
+        by_doc: dict[UUID | None, list[FinancialFinding]] = {}
+        for f in findings:
+            if f.document_id not in by_doc:
+                by_doc[f.document_id] = []
+            by_doc[f.document_id].append(f)
+
+        derived_all: list[FinancialFinding] = []
+        for doc_id, doc_findings in by_doc.items():
+            doc_derived = cls.compute_ratios_and_growth_for_doc(doc_findings, doc_id)
+            derived_all.extend(doc_derived)
+
+        # Cross-document comparisons
+        all_scoped_findings = findings + derived_all
+        cross_doc_comparisons = cls.compute_cross_document_comparisons(all_scoped_findings)
+        derived_all.extend(cross_doc_comparisons)
+
+        return derived_all
 
     @classmethod
     async def analyze(cls, state: ResearchState) -> dict[str, Any]:
@@ -371,7 +462,7 @@ class FinancialAnalyzerNode:
 
         raw_findings: list[FinancialFinding] = []
         for chunk in chunks:
-            extracted = cls.extract_metrics_from_text(chunk.content, chunk.chunk_id)
+            extracted = cls.extract_metrics_from_text(chunk.content, chunk.chunk_id, chunk.document_id)
             raw_findings.extend(extracted)
 
         derived = cls.compute_ratios_and_growth(raw_findings)

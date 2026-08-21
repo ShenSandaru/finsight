@@ -36,6 +36,7 @@ class ConversationQueryRequest(BaseModel):
     top_k: int = Field(5, ge=1, le=20, description="Maximum number of document chunks to retrieve")
     min_similarity: float = Field(0.30, ge=0.0, le=1.0, description="Minimum relevance threshold score")
     document_id: UUID | None = Field(None, description="Optional document UUID filter to scope retrieval")
+    document_ids: list[UUID] | None = Field(None, description="Optional list of document UUIDs for multi-document filtering")
 
 
 class ConversationQueryResponse(BaseModel):

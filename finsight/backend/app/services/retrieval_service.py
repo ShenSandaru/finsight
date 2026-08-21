@@ -49,18 +49,17 @@ class RetrievalService:
     async def search(
         self,
         query: str,
-        top_k: int = settings.RETRIEVAL_DEFAULT_TOP_K,
-        min_similarity: float | None = settings.RETRIEVAL_MIN_SIMILARITY,
+        top_k: int = 5,
+        min_similarity: float | None = None,
         document_id: UUID | None = None,
+        document_ids: list[UUID] | None = None,
         db: AsyncSession | None = None,
     ) -> list[RetrievalResult]:
         """
-        Execute vector similarity search for a query string.
-        1. Validates inputs (query, top_k, min_similarity).
-        2. Generates a 1536-dim query embedding vector using RETRIEVAL_QUERY task semantics (no DB transaction open).
-        3. Executes in-database pgvector cosine distance search.
-        4. Filters for indexed documents and non-null embeddings.
-        5. Returns structured RetrievalResult instances ordered by similarity descending.
+        Execute pgvector cosine similarity search against indexed document chunks.
+        Applies HNSW ef_search within the database transaction for optimal index traversal.
+        Preserves complete chunk metadata and descending similarity ordering.
+        Supports single document_id or multi-document document_ids filtering.
         """
         # Step 1: Input Validation
         if not isinstance(query, str) or not query.strip():
@@ -96,7 +95,10 @@ class RetrievalService:
             (1.0 - distance_expr) >= threshold,
         ]
 
-        if document_id is not None:
+        if document_ids:
+            # Multi-document filtering takes precedence
+            conditions.append(Chunk.document_id.in_(document_ids))
+        elif document_id is not None:
             conditions.append(Chunk.document_id == document_id)
 
         stmt = (

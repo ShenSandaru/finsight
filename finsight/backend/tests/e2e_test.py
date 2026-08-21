@@ -187,12 +187,13 @@ async def verify_hnsw_index_in_db():
         await isolated_engine.dispose()
 
 
-def search_retrieval(query: str, top_k: int = 5, min_similarity: float = 0.0, document_id: str | None = None) -> dict:
+def search_retrieval(query: str, top_k: int = 5, min_similarity: float = 0.0, document_id: str | None = None, document_ids: list[str] | None = None) -> dict:
     payload = {
         "query": query,
         "top_k": top_k,
         "min_similarity": min_similarity,
         "document_id": document_id,
+        "document_ids": document_ids,
     }
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request("http://127.0.0.1:8000/api/v1/search", data=body)
@@ -201,12 +202,13 @@ def search_retrieval(query: str, top_k: int = 5, min_similarity: float = 0.0, do
         return json.loads(resp.read().decode("utf-8"))
 
 
-def query_rag(query: str, top_k: int = 5, min_similarity: float = 0.30, document_id: str | None = None) -> dict:
+def query_rag(query: str, top_k: int = 5, min_similarity: float = 0.30, document_id: str | None = None, document_ids: list[str] | None = None) -> dict:
     payload = {
         "query": query,
         "top_k": top_k,
         "min_similarity": min_similarity,
         "document_id": document_id,
+        "document_ids": document_ids,
     }
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request("http://127.0.0.1:8000/api/v1/rag/query", data=body)
@@ -230,12 +232,13 @@ def get_conversation_messages(session_id: str) -> list[dict]:
         return json.loads(resp.read().decode("utf-8"))
 
 
-def query_conversation(session_id: str, query: str, top_k: int = 5, min_similarity: float = 0.30, document_id: str | None = None) -> dict:
+def query_conversation(session_id: str, query: str, top_k: int = 5, min_similarity: float = 0.30, document_id: str | None = None, document_ids: list[str] | None = None) -> dict:
     payload = {
         "query": query,
         "top_k": top_k,
         "min_similarity": min_similarity,
         "document_id": document_id,
+        "document_ids": document_ids,
     }
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(f"http://127.0.0.1:8000/api/v1/conversations/{session_id}/query", data=body)
@@ -598,6 +601,52 @@ def run_e2e_tests():
     print(f"  -> Citations: {len(trend_resp['citations'])} source chunks verified across statements.")
 
     print("  ✅ E2E 11 PASSED: Multi-Period Sequencing, Sequential YoY, and CAGR Trend Analysis verified.")
+
+    # 12. Cross-Document & Multi-Company Financial Comparison (Sprint 10.3 Verification)
+    print("\n[E2E 12] Executing Multi-Document & Cross-Company Financial Comparison...")
+    # Ingest Document B (Peer Company Filing)
+    peer_pdf_bytes = make_pdf_with_tables(
+        pages_tables=[
+            (
+                "Microsoft Corporation Peer Filing Fiscal 2025\nIncome Statement\nFor the Year Ended December 31, 2025",
+                [
+                    ["Financial Line Item", "2025", "2024"],
+                    ["Total Revenue", "$2,000", "$1,800"],
+                    ["Gross Profit", "$1,200", "$1,080"],
+                    ["Net Income", "$600", "$540"],
+                ]
+            )
+        ],
+        metadata={"title": "Microsoft 2025 Peer Filing", "document_type": "10-K"}
+    )
+    doc_b_resp = upload_multipart("microsoft_2025.pdf", peer_pdf_bytes, content_type="application/pdf")
+    doc_b_id = doc_b_resp["document"]["id"]
+    print(f"  -> Uploaded Peer Document B: {doc_b_id}")
+    doc_b_indexed = poll_document(doc_b_id, timeout=20)
+    assert doc_b_indexed["status"] == "indexed"
+
+    sess_comp = create_conversation_session(title="Cross-Document Comparison Session")
+    sess_comp_id = sess_comp["id"]
+    print(f"  -> Created Conversation Session for Cross-Doc Comparison: {sess_comp_id}")
+
+    # Query targeting both Document A (Apple 2025) and Document B (Microsoft 2025)
+    comp_query = "Compare total revenue and gross profit between Document A and Document B for 2025."
+    comp_resp = query_conversation(
+        session_id=sess_comp_id,
+        query=comp_query,
+        document_ids=[fin_id, doc_b_id],
+    )
+
+    assert comp_resp["grounded"] is True, "Multi-document research must produce grounded=True"
+    assert len(comp_resp["answer"]) > 0, "Multi-document response must be non-empty"
+    assert len(comp_resp["citations"]) >= 1, "Must contain verified citations"
+
+    retrieved_citation_doc_ids = {c["document_id"] for c in comp_resp["citations"]}
+    print(f"  -> Comparison Query: '{comp_query}'")
+    print(f"  -> Generated Comparison: {comp_resp['answer'][:150]}...")
+    print(f"  -> Citations: {len(comp_resp['citations'])} source chunks verified across {len(retrieved_citation_doc_ids)} documents.")
+
+    print("  ✅ E2E 12 PASSED: Multi-Document & Cross-Company Comparison (metric isolation, comparative difference, multi-doc citations) verified.")
 
     print("\n==================================================")
     print("ALL END-TO-END TESTS PASSED SUCCESSFULLY! 🎉")

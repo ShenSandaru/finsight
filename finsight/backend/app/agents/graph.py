@@ -169,6 +169,7 @@ class FinancialResearchService:
         standalone_query: str | None = None,
         session_id: UUID | None = None,
         document_id: UUID | None = None,
+        document_ids: list[UUID] | None = None,
         top_k: int = 5,
         min_similarity: float = 0.30,
     ) -> ResearchState:
@@ -180,6 +181,7 @@ class FinancialResearchService:
             "original_query": query.strip(),
             "standalone_query": standalone_query.strip() if standalone_query else query.strip(),
             "document_id": document_id,
+            "document_ids": document_ids,
             "top_k": top_k,
             "min_similarity": min_similarity,
             "sub_queries": [],
