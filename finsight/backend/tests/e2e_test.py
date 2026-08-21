@@ -711,6 +711,37 @@ def run_e2e_tests():
 
     print("  ✅ E2E 13 PASSED: Asynchronous Structured Financial Research Report (Worker execution, DAG reuse, Markdown compilation, Guardrails validation) verified.")
 
+    # 14. Financial Evaluation Benchmark Suite Execution (Sprint 10.5 Verification)
+    print("\n[E2E 14] Executing Standalone Financial Evaluation Benchmark Suite...")
+    from evaluation.runner import BenchmarkRunner
+    from evaluation.schemas import QualityThresholds
+
+    doc_map = {
+        "PRIMARY_DOC": fin_id,
+        "PEER_DOC": doc_b_id,
+    }
+
+    eval_runner = BenchmarkRunner()
+    benchmark_report = asyncio.run(eval_runner.run_all(document_id_map=doc_map))
+
+    print(f"  -> Total Benchmark Cases Evaluated: {benchmark_report.total_benchmark_cases}")
+    print(f"  -> Benchmark Pass Rate: {benchmark_report.overall_pass_rate * 100:.1f}%")
+    print(f"  -> Numerical Accuracy (Exact Match): {benchmark_report.numerical_exact_match * 100:.1f}%")
+    print(f"  -> Retrieval Hit Rate: {benchmark_report.retrieval_hit_rate * 100:.1f}%")
+    print(f"  -> Citation Precision: {benchmark_report.citation_precision * 100:.1f}%")
+    print(f"  -> Grounding Pass Rate: {benchmark_report.grounding_pass_rate * 100:.1f}%")
+    print(f"  -> Document Isolation: {benchmark_report.multi_document_isolation * 100:.1f}%")
+    print(f"  -> Adversarial Fallback: {benchmark_report.adversarial_fallback_accuracy * 100:.1f}%")
+
+    assert benchmark_report.total_benchmark_cases >= 6, "Must evaluate all benchmark cases"
+    assert benchmark_report.overall_pass_rate >= 0.95, f"Expected >= 95% pass rate, got {benchmark_report.overall_pass_rate * 100}%"
+    assert benchmark_report.numerical_exact_match >= 0.98, "Expected >= 98% numerical accuracy"
+    assert benchmark_report.multi_document_isolation == 1.0, "Expected 100% document isolation"
+    assert benchmark_report.adversarial_fallback_accuracy == 1.0, "Expected 100% adversarial fallback accuracy"
+    assert benchmark_report.thresholds_passed is True, "All benchmark quality thresholds must pass"
+
+    print("  ✅ E2E 14 PASSED: Standalone Financial Evaluation & Benchmark Suite (Retrieval, Numerical, Citation, Grounding, Isolation, Adversarial) verified.")
+
     print("\n==================================================")
     print("ALL END-TO-END TESTS PASSED SUCCESSFULLY! 🎉")
     print("==================================================")

@@ -408,7 +408,7 @@ flowchart TD
 ### Phase 10 — Advanced Financial Research Capabilities & Report Endpoints
 * **Goal:** Extend research capabilities with cross-company filing comparisons, deep financial ratio analysis, and asynchronous long-form research report endpoints.
 * **Why Needed:** Enable analysts to run deep comparative financial research across multiple documents and export structured reports.
-* **Current Status:** **Sprint 10.1, 10.2, 10.3 & 10.4 COMPLETE & VERIFIED (Extended Metrics, Time-Series/CAGR, Cross-Document Comparison, Structured Research Reports)**.
+* **Current Status:** **Sprint 10.1, 10.2, 10.3, 10.4 & 10.5 COMPLETE & VERIFIED (Phase 10 Fully Completed & Audited)**.
 * **Tasks:**
   - [x] Extend `FinancialAnalyzerNode` (`backend/app/agents/financial_analyzer.py`) with deterministic metric extraction and ratio calculations (Sprint 10.1):
     - [x] Operating Margin: `(operating_income / revenue) * 100` (`%`)
@@ -438,26 +438,28 @@ flowchart TD
     - [x] `ReportService` (`backend/app/services/report_service.py`) for deterministic publication-ready GitHub Flavored Markdown report compilation.
     - [x] Background ARQ task `generate_financial_report` in `app/tasks/definitions.py` reusing verified `FinancialResearchService.execute_research()` DAG and `ResponseGuard`.
     - [x] Worker registration in `app/worker.py` and REST API endpoints in `app/api/routes/reports.py` (`POST /reports`, `GET /reports/{id}`, `GET /reports`, `DELETE /reports/{id}`).
-  - [x] Unit and integration test suite passing (235 total pytest tests, 100% pass rate) (Sprint 10.1, 10.2, 10.3 & 10.4).
-  - [x] Docker E2E test suite updated with Scenario 13 (Asynchronous Structured Financial Research Report Pipeline) passing (13/13 E2E scenarios) (Sprint 10.4).
-  - [x] Developer documentation in `docs/development/financial-metrics.md`, `docs/development/trend-analysis.md`, `docs/development/cross-document-comparison.md`, and `docs/development/research-reports.md`.
-  - [ ] Financial Evaluation & Benchmark Suite (Sprint 10.5).
+  - [x] Financial Evaluation & Benchmark Suite (Sprint 10.5):
+    - [x] Standalone evaluation package in `backend/evaluation/` (`schemas.py`, `runner.py`, `evaluators/`).
+    - [x] Standardized benchmark dataset in `backend/evaluation/data/financial_benchmark_v1.json` covering single metrics, calculated ratios, time-series CAGR, cross-doc comparison, multi-turn follow-ups, and adversarial insufficient evidence.
+    - [x] Deterministic evaluators (`RetrievalEvaluator`, `NumericalEvaluator`, `CitationEvaluator`, `GroundingEvaluator`, `MultiDocumentIsolationEvaluator`).
+    - [x] Quality threshold enforcement (Numerical Exact Match $\ge 98\%$, Hit Rate $\ge 95\%$, Citation Precision $\ge 95\%$, Isolation $= 100\%$, Adversarial $= 100\%$).
+    - [x] Automated CLI benchmark runner `backend/evaluation/run_benchmark.py`.
+  - [x] Unit and integration test suite passing (254 total pytest tests, 100% pass rate) (Sprint 10.1–10.5).
+  - [x] Docker E2E test suite updated with Scenario 14 (Financial Evaluation Benchmark Suite Execution) passing (14/14 E2E scenarios) (Sprint 10.5).
+  - [x] Developer documentation in `docs/development/financial-metrics.md`, `docs/development/trend-analysis.md`, `docs/development/cross-document-comparison.md`, `docs/development/research-reports.md`, and `docs/development/evaluation.md`.
 * **Files Affected:**
-  - `backend/app/models/report.py`
-  - `backend/alembic/versions/0005_enhance_reports_schema.py`
-  - `backend/app/schemas/report.py`
-  - `backend/app/services/report_service.py`
-  - `backend/app/tasks/definitions.py`
-  - `backend/app/worker.py`
-  - `backend/app/api/routes/reports.py`
-  - `backend/app/main.py`
-  - `backend/tests/test_report_service.py`
+  - `backend/evaluation/schemas.py`
+  - `backend/evaluation/evaluators/`
+  - `backend/evaluation/data/financial_benchmark_v1.json`
+  - `backend/evaluation/runner.py`
+  - `backend/evaluation/run_benchmark.py`
+  - `backend/tests/test_evaluation_framework.py`
   - `backend/tests/e2e_test.py`
-  - `docs/development/research-reports.md`
+  - `docs/development/evaluation.md`
   - `README.md`
   - `plan.md`
 * **Acceptance Criteria:**
-  - Clients can submit asynchronous report requests via REST API; ARQ workers process jobs by executing the verified multi-agent research DAG without code duplication; structured Markdown reports format with executive summaries, metrics tables, CAGR analysis, cross-doc comparisons, and citations; Guardrails validation passes before status becomes 'completed'; 235 backend tests and 13 Docker E2E scenarios pass cleanly.
+  - Standalone evaluation package executes against benchmark dataset; deterministic evaluators measure retrieval, numerical, citation, grounding, isolation, and fallback metrics; quality thresholds pass with zero production pipeline modifications; 254 backend pytest tests and 14 Docker E2E scenarios pass cleanly.
 
 ---
 
