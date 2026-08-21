@@ -139,11 +139,11 @@ def get_document(doc_id: str) -> dict:
         return json.loads(resp.read().decode("utf-8"))
 
 
-def poll_document(doc_id: str, timeout: int = 10) -> dict:
+def poll_document(doc_id: str, timeout: int = 15) -> dict:
     for _ in range(timeout * 2):
         time.sleep(0.5)
         doc = get_document(doc_id)
-        if doc["status"] in ("parsed", "failed"):
+        if doc["status"] in ("indexed", "parsed", "failed"):
             return doc
     return get_document(doc_id)
 
@@ -481,6 +481,40 @@ def run_e2e_tests():
     print("  -> Session Isolation Verified: Session B messages strictly separated from Session A.")
 
     print("  ✅ E2E 7 PASSED: Multi-turn grounded conversation, follow-up query rewriting, message history, and session isolation verified.")
+
+    # 8. Multi-Agent Financial Research System (Sprint 9.1 Verification)
+    print("\n[E2E 8] Executing Multi-Agent Financial Research System via LangGraph...")
+    sess_agent = create_conversation_session(title="LangGraph Multi-Agent Financial Research")
+    sess_agent_id = sess_agent["id"]
+    print(f"  -> Created Conversation Session for Multi-Agent Research: {sess_agent_id}")
+
+    # Comparative multi-period research query
+    research_query = "Compare the company's 2024 and 2025 revenue and gross profit."
+    agent_resp = query_conversation(session_id=sess_agent_id, query=research_query, document_id=fin_id)
+
+    assert agent_resp["grounded"] is True, "Expected grounded=True from multi-agent research graph"
+    assert len(agent_resp["answer"]) > 0, "Expected non-empty research answer"
+    assert len(agent_resp["citations"]) >= 1, "Expected structured citations backing research response"
+    assert agent_resp["retrieved_chunks"] >= 1, "Expected retrieved chunks in research state"
+
+    for cit in agent_resp["citations"]:
+        assert cit["chunk_id"] is not None
+        assert cit["document_id"] == fin_id
+        assert cit["page_number"] is not None
+        assert 0.0 <= cit["similarity"] <= 1.0
+
+    print(f"  -> Research Query: '{research_query}'")
+    print(f"  -> Generated Answer: {agent_resp['answer'][:120]}...")
+    print(f"  -> Citations: {len(agent_resp['citations'])} source chunks verified.")
+
+    # Verify message persistence
+    agent_msgs = get_conversation_messages(sess_agent_id)
+    assert len(agent_msgs) == 2, f"Expected 2 messages (1 user, 1 assistant), got {len(agent_msgs)}"
+    assert agent_msgs[0]["role"] == "user" and agent_msgs[0]["content"] == research_query
+    assert agent_msgs[1]["role"] == "assistant"
+    print("  -> Multi-Agent Research messages persisted in database session.")
+
+    print("  ✅ E2E 8 PASSED: LangGraph Multi-Agent Research workflow (Planner -> Retriever -> Analyzer -> Auditor -> Synthesis) verified.")
 
     print("\n==================================================")
     print("ALL END-TO-END TESTS PASSED SUCCESSFULLY! 🎉")

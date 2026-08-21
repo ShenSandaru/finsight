@@ -60,6 +60,11 @@ class Settings(BaseSettings):
     CONVERSATION_MAX_SESSIONS_MESSAGES: int = 100
     CONVERSATION_FOLLOWUP_REWRITE_ENABLED: bool = True
 
+    # Multi-Agent Research Configuration (Sprint 9.1)
+    AGENT_MAX_SUBQUERIES: int = 4
+    AGENT_MAX_STEPS: int = 6
+    AGENT_ANALYZER_CONFIDENCE_THRESHOLD: float = 0.50
+
     # Gemini Generation Configuration
     GEMINI_GENERATION_PROVIDER: str = "gemini"  # "gemini" or "fake" (for testing)
     GEMINI_MODEL: str = "gemini-2.0-flash"

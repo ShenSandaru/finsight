@@ -59,6 +59,9 @@ class MockRAGService:
 
 
 class FakeGenService:
+    async def generate_answer(self, query: str, context: str) -> str:
+        return "Mocked answer [SOURCE 1]"
+
     async def close(self):
         pass
 
@@ -66,6 +69,21 @@ class FakeGenService:
 class FakeRetService:
     def __init__(self):
         self.embedding_service = FakeGenService()
+
+    async def search(self, query: str, top_k: int = 5, min_similarity: float = 0.0, document_id=None, db=None) -> list[RetrievalResult]:
+        from app.services.retrieval_service import RetrievalResult
+        return [
+            RetrievalResult(
+                chunk_id=uuid.uuid4(),
+                document_id=uuid.uuid4(),
+                content="Apple total revenue in 2025 was $1000 million. Total revenue in 2024 was $900 million.",
+                chunk_type="table",
+                chunk_index=0,
+                page_number=1,
+                similarity=0.92,
+                metadata={"statement_type": "income_statement", "fiscal_periods": ["2025", "2024"]},
+            )
+        ]
 
 
 @pytest.mark.asyncio
