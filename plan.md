@@ -317,10 +317,10 @@ flowchart TD
 
 ---
 
-### Phase 8 — Vector Index Optimization (HNSW) & Multi-Turn / Agent Foundation
-* **Goal:** Optimize vector retrieval performance using HNSW indexing and prepare foundation for multi-turn conversations and multi-agent synthesis.
+### Phase 8 — Vector Index Optimization (HNSW) & Conversational Multi-Turn RAG
+* **Goal:** Optimize vector retrieval performance using HNSW indexing and implement session-based conversational memory for multi-turn financial research.
 * **Why Needed:** Enhance vector retrieval scale and support iterative financial analysis workflows.
-* **Current Status:** **Sprint 8.1 COMPLETED & VERIFIED (HNSW Index Optimization)**; Sprint 8.2 (Conversational Memory & Multi-Turn Sessions) Planned.
+* **Current Status:** **Phase 8 COMPLETE & VERIFIED (Sprint 8.1 HNSW Optimization + Sprint 8.2 Conversational Memory)**.
 * **Tasks:**
   - [x] Add HNSW and benchmark settings (`HNSW_ENABLED`, `HNSW_M`, `HNSW_EF_CONSTRUCTION`, `HNSW_EF_SEARCH`, `RETRIEVAL_RECALL_TARGET`) to `app/core/config.py` (Sprint 8.1).
   - [x] Create reversible Alembic migration `0003_add_hnsw_index.py` creating `ix_chunks_embedding_hnsw_cosine` on `chunks.embedding` with `vector_cosine_ops` (Sprint 8.1).
@@ -328,22 +328,40 @@ flowchart TD
   - [x] Update `RetrievalService` with transaction-local `SET LOCAL hnsw.ef_search` tuning (Sprint 8.1).
   - [x] Create benchmark suite `tests/benchmark_retrieval.py` measuring exact vs HNSW latency percentiles (Avg, P50, P95), Recall@5 (100%), and overlap (100%) (Sprint 8.1).
   - [x] Create unit and database integration tests in `tests/test_vector_index.py` (20 tests passed) (Sprint 8.1).
-  - [x] Update Docker E2E test suite `tests/e2e_test.py` with HNSW catalog verification and RAG scenario (Sprint 8.1).
-  - [x] Create comprehensive developer documentation `docs/development/hnsw-retrieval.md` (Sprint 8.1).
-  - [ ] Support conversation session management, chat history persistence, and multi-turn context synthesis (Sprint 8.2).
+  - [x] Create documentation `docs/development/hnsw-retrieval.md` (Sprint 8.1).
+  - [x] Add conversation settings (`CONVERSATION_MAX_HISTORY_MESSAGES`, `CONVERSATION_MAX_MESSAGE_CHARS`, `CONVERSATION_MAX_SESSIONS_MESSAGES`, `CONVERSATION_FOLLOWUP_REWRITE_ENABLED`) to `app/core/config.py` (Sprint 8.2).
+  - [x] Create ORM models `ConversationSession` and `ConversationMessage` with cascade delete and indexing in `app/models/conversation.py` (Sprint 8.2).
+  - [x] Create reversible Alembic migration `0004_add_conversation_memory.py` (Sprint 8.2).
+  - [x] Create Pydantic schemas in `app/schemas/conversation.py` (Sprint 8.2).
+  - [x] Implement deterministic follow-up resolution service in `app/services/query_context_service.py` (Sprint 8.2).
+  - [x] Implement session orchestration and message lifecycle in `app/services/conversation_service.py` (Sprint 8.2).
+  - [x] Expose REST endpoints in `app/api/routes/conversations.py` (`POST /`, `GET /{id}`, `GET /{id}/messages`, `DELETE /{id}`, `POST /{id}/query`) (Sprint 8.2).
+  - [x] Create 30 unit, catalog, and integration tests in `tests/test_conversation_service.py` (Sprint 8.2).
+  - [x] Update Docker E2E test suite `tests/e2e_test.py` with Scenario 7 multi-turn conversation and session isolation (Sprint 8.2).
+  - [x] Create developer documentation `docs/development/conversational-rag.md` (Sprint 8.2).
 * **Files Affected:**
   - `backend/app/core/config.py`
+  - `backend/app/models/conversation.py`
+  - `backend/app/models/__init__.py`
   - `backend/alembic/versions/0003_add_hnsw_index.py`
+  - `backend/alembic/versions/0004_add_conversation_memory.py`
   - `backend/alembic/env.py`
+  - `backend/app/schemas/conversation.py`
   - `backend/app/services/vector_index_service.py`
+  - `backend/app/services/query_context_service.py`
+  - `backend/app/services/conversation_service.py`
   - `backend/app/services/retrieval_service.py`
+  - `backend/app/api/routes/conversations.py`
+  - `backend/app/main.py`
   - `backend/tests/benchmark_retrieval.py`
   - `backend/tests/test_vector_index.py`
+  - `backend/tests/test_conversation_service.py`
   - `backend/tests/e2e_test.py`
   - `docs/development/hnsw-retrieval.md`
+  - `docs/development/conversational-rag.md`
   - `plan.md`
 * **Acceptance Criteria:**
-  - HNSW index is active and valid in PostgreSQL; Recall@5 reaches 100% on benchmark corpus; all 166 backend tests and all 6 Docker E2E scenarios pass cleanly.
+  - HNSW index is active in PostgreSQL; Recall@5 reaches 100%; multi-turn conversations persist message history; follow-ups resolve deterministically; session isolation is strict; all 196 backend tests and all 7 Docker E2E scenarios pass cleanly.
 
 ---
 

@@ -215,6 +215,35 @@ def query_rag(query: str, top_k: int = 5, min_similarity: float = 0.30, document
         return json.loads(resp.read().decode("utf-8"))
 
 
+def create_conversation_session(title: str | None = None) -> dict:
+    payload = {"title": title}
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request("http://127.0.0.1:8000/api/v1/conversations", data=body)
+    req.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def get_conversation_messages(session_id: str) -> list[dict]:
+    req = urllib.request.Request(f"http://127.0.0.1:8000/api/v1/conversations/{session_id}/messages")
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def query_conversation(session_id: str, query: str, top_k: int = 5, min_similarity: float = 0.30, document_id: str | None = None) -> dict:
+    payload = {
+        "query": query,
+        "top_k": top_k,
+        "min_similarity": min_similarity,
+        "document_id": document_id,
+    }
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(f"http://127.0.0.1:8000/api/v1/conversations/{session_id}/query", data=body)
+    req.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
 def run_e2e_tests():
     print("==================================================")
     print("STARTING E2E INTEGRATION & PIPELINE VERIFICATION")
@@ -395,6 +424,63 @@ def run_e2e_tests():
         print(f"  -> RAG query '{rq}': grounded answer generated with {len(rag_res['citations'])} citations (top citation page: {rag_res['citations'][0]['page_number']}, statement: {rag_res['citations'][0]['statement_type']})")
 
     print("  ✅ E2E 6 PASSED: Grounded RAG answer generation, context assembly, and structured citation verification passed.")
+
+    # 7. Conversational Memory & Multi-Turn RAG (Sprint 8.2 Verification)
+    print("\n[E2E 7] Executing Multi-Turn Grounded Conversation & Session Isolation...")
+    
+    # Session A: Multi-turn research
+    sess_a = create_conversation_session(title="Financial 10-K Multi-Turn")
+    sess_a_id = sess_a["id"]
+    print(f"  -> Created Conversation Session A: {sess_a_id}")
+
+    # Turn 1: Initial Question
+    q1 = "What was the total revenue in 2025?"
+    turn1_resp = query_conversation(session_id=sess_a_id, query=q1, document_id=fin_id)
+    assert turn1_resp["grounded"] is True
+    assert len(turn1_resp["citations"]) >= 1
+    print(f"  -> Turn 1 Query: '{q1}' => Answered with {len(turn1_resp['citations'])} citations.")
+
+    # Turn 2: Follow-up question referencing prior turn
+    q2 = "What about 2024?"
+    turn2_resp = query_conversation(session_id=sess_a_id, query=q2, document_id=fin_id)
+    assert turn2_resp["grounded"] is True
+    assert turn2_resp["resolved_query"] is not None
+    assert "2024" in turn2_resp["resolved_query"]
+    print(f"  -> Turn 2 Follow-up: '{q2}' (Resolved: '{turn2_resp['resolved_query']}') => Grounded answer generated.")
+
+    # Turn 3: Follow-up comparative question
+    q3 = "How much did it change?"
+    turn3_resp = query_conversation(session_id=sess_a_id, query=q3, document_id=fin_id)
+    assert turn3_resp["grounded"] is True
+    print(f"  -> Turn 3 Comparative: '{q3}' => Grounded answer generated.")
+
+    # Verify message persistence and ordering in Session A
+    msgs_a = get_conversation_messages(sess_a_id)
+    assert len(msgs_a) == 6, f"Expected 6 messages (3 user + 3 assistant), got {len(msgs_a)}"
+    assert msgs_a[0]["role"] == "user" and msgs_a[0]["content"] == q1
+    assert msgs_a[1]["role"] == "assistant"
+    assert msgs_a[2]["role"] == "user" and msgs_a[2]["content"] == q2
+    assert msgs_a[3]["role"] == "assistant"
+    assert msgs_a[4]["role"] == "user" and msgs_a[4]["content"] == q3
+    assert msgs_a[5]["role"] == "assistant"
+    print("  -> Session A: 6 messages persisted in chronological order.")
+
+    # Session B: Verify Session Isolation
+    sess_b = create_conversation_session(title="Isolated Session B")
+    sess_b_id = sess_b["id"]
+    msgs_b = get_conversation_messages(sess_b_id)
+    assert len(msgs_b) == 0, f"Session B should have 0 messages, got {len(msgs_b)}"
+
+    q_b = "What were total assets on the balance sheet?"
+    turn_b_resp = query_conversation(session_id=sess_b_id, query=q_b, document_id=fin_id)
+    assert turn_b_resp["grounded"] is True
+
+    msgs_b_after = get_conversation_messages(sess_b_id)
+    assert len(msgs_b_after) == 2, f"Session B should have exactly 2 messages, got {len(msgs_b_after)}"
+    assert msgs_b_after[0]["content"] == q_b
+    print("  -> Session Isolation Verified: Session B messages strictly separated from Session A.")
+
+    print("  ✅ E2E 7 PASSED: Multi-turn grounded conversation, follow-up query rewriting, message history, and session isolation verified.")
 
     print("\n==================================================")
     print("ALL END-TO-END TESTS PASSED SUCCESSFULLY! 🎉")

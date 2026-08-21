@@ -54,6 +54,12 @@ class Settings(BaseSettings):
     RAG_MAX_CONTEXT_CHARS: int = 18000
     RAG_MIN_RELEVANCE_SCORE: float = 0.30
 
+    # Conversation Configuration
+    CONVERSATION_MAX_HISTORY_MESSAGES: int = 10
+    CONVERSATION_MAX_MESSAGE_CHARS: int = 8000
+    CONVERSATION_MAX_SESSIONS_MESSAGES: int = 100
+    CONVERSATION_FOLLOWUP_REWRITE_ENABLED: bool = True
+
     # Gemini Generation Configuration
     GEMINI_GENERATION_PROVIDER: str = "gemini"  # "gemini" or "fake" (for testing)
     GEMINI_MODEL: str = "gemini-2.0-flash"
