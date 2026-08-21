@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE: int = 50 * 1024 * 1024  # 50MB in bytes
     ALLOWED_FILE_TYPES: list[str] = ["pdf", "txt", "csv"]
 
+    # Chunking Configuration
+    DEFAULT_CHUNK_SIZE: int = 1200
+    DEFAULT_CHUNK_OVERLAP: int = 150
+
     @property
     def DATABASE_URL(self) -> str:
         return (

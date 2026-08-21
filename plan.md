@@ -216,20 +216,25 @@ flowchart TD
 ---
 
 ### Phase 5 — Table-Aware Chunking Strategy
-* **Goal:** Split extracted document text and tables into semantically coherent, citation-traceable chunks.
+* **Goal:** Split extracted document text and tables into semantically coherent, citation-traceable chunks and persist them to PostgreSQL.
 * **Why Needed:** LLM context windows and embedding models require chunks that do not cut sentences or table rows in half.
-* **Current Status:** Not Implemented.
+* **Current Status:** Completed (Sprint 5.1 TableAwareChunkerService, deterministic text & table chunking, JSONB semantic metadata, and transactional chunk persistence verified).
 * **Tasks:**
-  - [ ] Create `ChunkerService` (`app/services/chunker.py`).
-  - [ ] Implement recursive text splitter for narrative sections (target size: 500–800 tokens, overlap: 100–150 tokens).
-  - [ ] Implement atomic table chunking: Keep small tables intact; split large multi-page tables row-wise while repeating the header row on every split.
-  - [ ] Populate `Chunk.metadata_` with page numbers, section headers, file names, and chunk positions.
-  - [ ] Save generated chunks to PostgreSQL with `chunk_type` (`text` vs `table`).
+  - [x] Create `TableAwareChunkerService` (`app/services/chunker.py`) and `ChunkData` contract (Sprint 5.1).
+  - [x] Implement recursive text splitter for narrative sections (target size: 1200 characters, overlap: 150 characters) strictly preserving `page_number` (Sprint 5.1).
+  - [x] Implement atomic table chunking: Keep PDF tables intact using Markdown formatting, enriched with statement semantics (`statement_type`, `period_type`, `fiscal_periods`, `currency`, `units`, `key_metrics`) (Sprint 5.1).
+  - [x] Support plain text (TXT) and CSV structured chunking with repeated header rows for large files (Sprint 5.1).
+  - [x] Two-phase transactional chunk persistence in worker pipeline (`app/tasks/definitions.py`) with atomic replacement / idempotency protection (Sprint 5.1).
+  - [x] Save generated chunks to PostgreSQL with `chunk_type` (`text` vs `table`) and `embedding = NULL` (Sprint 5.1).
 * **Files Likely Affected:**
+  - `backend/app/core/config.py`
   - `backend/app/services/chunker.py`
-  - `backend/app/models/chunk.py`
+  - `backend/app/tasks/definitions.py`
+  - `backend/tests/test_chunker.py`
+  - `backend/tests/e2e_test.py`
+  - `docs/development/chunking.md`
 * **Acceptance Criteria:**
-  - Chunks retain complete semantic sentences; table chunks include column context; every chunk contains accurate `page_number` and `document_id`.
+  - Chunks retain complete semantic sentences and table Markdown representations; every chunk contains accurate `page_number`, sequential `chunk_index`, and `document_id`; `Document.total_chunks` matches actual `Chunk` row counts in PostgreSQL with `embedding = NULL`.
 
 ---
 

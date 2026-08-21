@@ -1,20 +1,23 @@
+
 import time
 import uuid
 import logging
 from typing import Any
 from collections import Counter
 
-from sqlalchemy import select
+from sqlalchemy import select, delete
 
 from app.core.database import async_session
 from app.core.config import get_settings
 from app.core.exceptions import ProcessingError
 from app.models.document import Document
+from app.models.chunk import Chunk
 from app.services.pdf_parser import PDFParserService
 from app.services.text_parser import TextParserService
 from app.services.csv_parser import CSVParserService
 from app.services.table_extractor import TableExtractorService
 from app.services.table_semantics import FinancialTableSemanticService, StatementType
+from app.services.chunker import TableAwareChunkerService
 
 logger = logging.getLogger("finsight.worker.tasks")
 settings = get_settings()
@@ -22,11 +25,12 @@ settings = get_settings()
 
 async def process_document(ctx: dict[str, Any], document_id_str: str) -> dict[str, Any]:
     """
-    Ingestion task orchestration for Sprint 3.1, 3.2, 4.1 & 4.2.
+    Ingestion task orchestration for Sprint 3.1, 3.2, 4.1, 4.2 & 5.1.
     Loads Document, transitions to 'processing', invokes the appropriate parser
-    (PDFParserService, TextParserService, CSVParserService), extracts tables for PDFs
-    via TableExtractorService and enriches them in-memory via FinancialTableSemanticService
-    without storing chunks, updates total_pages and metadata, and advances status to 'parsed'.
+    (PDFParserService, TextParserService, CSVParserService), extracts & semantically enriches
+    tables for PDFs, generates structured text & table chunks via TableAwareChunkerService,
+    atomically persists Chunk records (with embedding=None), updates total_pages and total_chunks,
+    and advances status to 'parsed'.
     """
     job_id = ctx.get("job_id", "unknown")
     try:
@@ -36,6 +40,7 @@ async def process_document(ctx: dict[str, Any], document_id_str: str) -> dict[st
         return {"status": "error", "message": "Invalid UUID format"}
 
     logger.info("Processing document [id=%s, job_id=%s]", doc_uuid, job_id)
+    start_time = time.perf_counter()
 
     async with async_session() as session:
         try:
@@ -63,16 +68,18 @@ async def process_document(ctx: dict[str, Any], document_id_str: str) -> dict[st
 
             table_count = 0
             statement_counts: dict[str, int] = {}
+            extracted_tables = []
+
             if document.file_type == "pdf":
                 parser = PDFParserService()
                 parsed_doc = parser.extract_text_and_metadata(file_path=file_path, document_id=str(doc_uuid))
 
-                # Extract financial tables in-memory (Sprint 4.1 - no database Chunk rows created)
+                # Extract financial tables
                 table_extractor = TableExtractorService()
                 extracted_tables = table_extractor.extract_tables_from_pdf(file_path=file_path, document_id=str(doc_uuid))
                 table_count = len(extracted_tables)
 
-                # Enrich tables with semantic classification & period context (Sprint 4.2 - in-memory)
+                # Enrich tables with semantic classification & period context
                 semantic_service = FinancialTableSemanticService()
                 for tbl in extracted_tables:
                     tbl.semantics = semantic_service.analyze_table(tbl)
@@ -89,8 +96,32 @@ async def process_document(ctx: dict[str, Any], document_id_str: str) -> dict[st
             else:
                 raise ProcessingError(f"Unsupported file type: {document.file_type}")
 
-            # Update metadata from parsed document
+            # Generate Chunks (Sprint 5.1 - TableAwareChunkerService)
+            chunker = TableAwareChunkerService()
+            chunks_data = chunker.create_chunks(parsed_doc, extracted_tables)
+
+            # Atomic database transaction:
+            # 1. Delete existing chunks for this document (idempotency/retry safety)
+            await session.execute(delete(Chunk).where(Chunk.document_id == doc_uuid))
+
+            # 2. Bulk insert newly generated Chunk ORM records
+            db_chunks = [
+                Chunk(
+                    document_id=doc_uuid,
+                    content=c.content,
+                    chunk_type=c.chunk_type,
+                    chunk_index=c.chunk_index,
+                    page_number=c.page_number,
+                    metadata_=c.metadata,
+                    embedding=None,
+                )
+                for c in chunks_data
+            ]
+            session.add_all(db_chunks)
+
+            # 3. Update document metadata and transition status
             document.total_pages = parsed_doc.total_pages
+            document.total_chunks = len(chunks_data)
             if not document.title and parsed_doc.metadata.get("title"):
                 document.title = parsed_doc.metadata["title"]
 
@@ -102,7 +133,7 @@ async def process_document(ctx: dict[str, Any], document_id_str: str) -> dict[st
             duration = time.perf_counter() - start_time
             if document.file_type == "pdf":
                 logger.info(
-                    "Successfully processed PDF document '%s' (%d pages, %d tables extracted [Income Statements: %d, Balance Sheets: %d, Cash Flows: %d, Unknown: %d]) in %.4fs [job_id=%s]",
+                    "Successfully processed PDF document '%s' (%d pages, %d tables extracted [Income Statements: %d, Balance Sheets: %d, Cash Flows: %d, Unknown: %d], %d chunks created) in %.4fs [job_id=%s]",
                     doc_uuid,
                     parsed_doc.total_pages,
                     table_count,
@@ -110,16 +141,17 @@ async def process_document(ctx: dict[str, Any], document_id_str: str) -> dict[st
                     statement_counts.get(StatementType.BALANCE_SHEET, 0),
                     statement_counts.get(StatementType.CASH_FLOW, 0),
                     statement_counts.get(StatementType.UNKNOWN, 0),
+                    len(chunks_data),
                     duration,
                     job_id,
                 )
             else:
                 logger.info(
-                    "Successfully processed %s document '%s' (%d pages, %d tables extracted) in %.4fs [job_id=%s]",
+                    "Successfully processed %s document '%s' (%d pages, %d chunks created) in %.4fs [job_id=%s]",
                     document.file_type.upper(),
                     doc_uuid,
                     parsed_doc.total_pages,
-                    table_count,
+                    len(chunks_data),
                     duration,
                     job_id,
                 )
@@ -130,6 +162,7 @@ async def process_document(ctx: dict[str, Any], document_id_str: str) -> dict[st
                 "filename": document.filename,
                 "file_type": document.file_type,
                 "total_pages": parsed_doc.total_pages,
+                "total_chunks": len(chunks_data),
                 "tables_extracted": table_count,
                 "duration_seconds": round(duration, 4),
             }
@@ -138,16 +171,17 @@ async def process_document(ctx: dict[str, Any], document_id_str: str) -> dict[st
             await session.rollback()
             logger.exception("Failed to process document '%s' in job [%s]: %s", doc_uuid, job_id, exc)
 
-            # Record failure state on document record
+            # Two-phase transaction error recovery: NEW transaction to record failure state
             try:
-                result = await session.execute(
-                    select(Document).where(Document.id == doc_uuid)
-                )
-                doc_to_fail = result.scalar_one_or_none()
-                if doc_to_fail:
-                    doc_to_fail.status = "failed"
-                    doc_to_fail.processing_error = str(exc)[:500]
-                    await session.commit()
+                async with async_session() as err_session:
+                    result = await err_session.execute(
+                        select(Document).where(Document.id == doc_uuid)
+                    )
+                    doc_to_fail = result.scalar_one_or_none()
+                    if doc_to_fail:
+                        doc_to_fail.status = "failed"
+                        doc_to_fail.processing_error = str(exc)[:500]
+                        await err_session.commit()
             except Exception as inner_exc:
                 logger.error("Could not record failed status for document '%s': %s", doc_uuid, inner_exc)
 
