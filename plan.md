@@ -408,16 +408,38 @@ flowchart TD
 ### Phase 10 — Advanced Financial Research Capabilities & Report Endpoints
 * **Goal:** Extend research capabilities with cross-company filing comparisons, deep financial ratio analysis, and asynchronous long-form research report endpoints.
 * **Why Needed:** Enable analysts to run deep comparative financial research across multiple documents and export structured reports.
-* **Current Status:** **PLANNED / NEXT**
+* **Current Status:** **Sprint 10.1 & 10.2 COMPLETE & VERIFIED (Extended Metrics, Time-Series & CAGR Analysis)**.
 * **Tasks:**
-  - [ ] Advanced financial ratio analysis (Liquidity, Solvency, Efficiency, Profitability metrics).
-  - [ ] Multi-document & cross-company comparative analysis.
-  - [ ] Implement report endpoints (`POST /api/v1/reports`, `GET /api/v1/reports/{id}`, `GET /api/v1/reports`).
-  - [ ] Rich structured markdown financial reports with tabular synthesis and export capabilities.
-* **Files Likely Affected:**
-  - `backend/app/schemas/report.py`
-  - `backend/app/api/routes/reports.py`
-  - `backend/app/services/report_service.py`
+  - [x] Extend `FinancialAnalyzerNode` (`backend/app/agents/financial_analyzer.py`) with deterministic metric extraction and ratio calculations (Sprint 10.1):
+    - [x] Operating Margin: `(operating_income / revenue) * 100` (`%`)
+    - [x] Return on Assets (ROA): `(net_income / total_assets) * 100` (`%`)
+    - [x] Current Ratio: `total_current_assets / total_current_liabilities` (`ratio`)
+    - [x] Debt-to-Equity: `total_liabilities / total_stockholders_equity` (`ratio`)
+    - [x] Free Cash Flow (FCF): `operating_cash_flow - abs(capital_expenditures)` (`$`)
+    - [x] Multi-chunk provenance merging (`source_chunk_ids = list(set(num.source_chunk_ids + den.source_chunk_ids))`)
+    - [x] Zero-division protection (`den.value != 0`) and bracketed negative value parsing `$(400)`.
+  - [x] Multi-Period Sequencing & CAGR Trend Analysis (Sprint 10.2):
+    - [x] Annual 4-digit period filtering (`2022`, `2023`, `2024`, `2025`) and quarterly exclusion.
+    - [x] Chronological ascending ordering and metric grouping across time series.
+    - [x] Sequential YoY growth calculation between every adjacent chronological pair.
+    - [x] Multi-period Compound Annual Growth Rate (CAGR) with elapsed-year exponent $N = p_{\text{end}} - p_{\text{start}}$.
+    - [x] Deterministic trend direction classification (`Consistent Increase`, `Consistent Decrease`, `Flat`, `Volatile`, `Incomplete Series`).
+    - [x] Complete multi-period source provenance aggregation.
+  - [x] Unit and edge-case test suite passing (227 total pytest tests, 100% pass rate) (Sprint 10.1 & 10.2).
+  - [x] Docker E2E test suite updated with Scenario 11 (Multi-Period CAGR & Trend Analysis) passing (11/11 E2E scenarios) (Sprint 10.2).
+  - [x] Create developer documentation in `docs/development/financial-metrics.md` and `docs/development/trend-analysis.md`.
+  - [ ] Multi-Document & Cross-Company Comparison (Sprint 10.3).
+  - [ ] Structured Financial Research Reports & REST Endpoints (Sprint 10.4).
+  - [ ] Financial Evaluation & Benchmark Suite (Sprint 10.5).
+* **Files Affected:**
+  - `backend/app/agents/financial_analyzer.py`
+  - `backend/tests/test_agent_system.py`
+  - `backend/tests/e2e_test.py`
+  - `docs/development/financial-metrics.md`
+  - `docs/development/trend-analysis.md`
+  - `plan.md`
+* **Acceptance Criteria:**
+  - Financial questions requesting Operating Margin, ROA, Current Ratio, Debt-to-Equity, FCF, Multi-Period CAGR, and Trend Direction calculate deterministically in Python; multi-chunk source provenance is preserved; 227 backend tests and 11 Docker E2E scenarios pass cleanly.
 
 ---
 

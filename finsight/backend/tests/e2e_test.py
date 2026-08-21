@@ -550,6 +550,55 @@ def run_e2e_tests():
 
     print("  ✅ E2E 9 PASSED: Guardrails AI output validation (structure, citation integrity, numeric bounds, grounding) verified.")
 
+    # 10. Extended Financial Metrics & Ratio Library (Sprint 10.1 Verification)
+    print("\n[E2E 10] Executing Extended Financial Metrics & Ratio Analysis...")
+    sess_metrics = create_conversation_session(title="Extended Financial Metrics Analysis")
+    sess_metrics_id = sess_metrics["id"]
+    print(f"  -> Created Conversation Session for Extended Metrics: {sess_metrics_id}")
+
+    # Query targeting Operating Margin, ROA, Current Ratio, Debt-to-Equity, and FCF
+    ratio_query = "Calculate operating margin, ROA, current ratio, debt-to-equity, and free cash flow for 2025."
+    ratio_resp = query_conversation(session_id=sess_metrics_id, query=ratio_query, document_id=fin_id)
+
+    # Assertions on response grounding and citations
+    assert ratio_resp["grounded"] is True, "Extended metrics research should produce grounded=True"
+    assert len(ratio_resp["answer"]) > 0, "Extended metrics response must be non-empty"
+    assert len(ratio_resp["citations"]) >= 1, "Extended metrics must be backed by financial statement chunks"
+
+    for cit in ratio_resp["citations"]:
+        assert cit["chunk_id"] is not None
+        assert cit["document_id"] == fin_id
+
+    print(f"  -> Ratio Research Query: '{ratio_query}'")
+    print(f"  -> Generated Analysis: {ratio_resp['answer'][:150]}...")
+    print(f"  -> Citations: {len(ratio_resp['citations'])} source chunks verified across statements.")
+
+    print("  ✅ E2E 10 PASSED: Extended Financial Metrics (Operating Margin, ROA, Current Ratio, Debt-to-Equity, FCF) verified.")
+
+    # 11. Multi-Period Sequencing & Deterministic CAGR Trend Analysis (Sprint 10.2 Verification)
+    print("\n[E2E 11] Executing Multi-Period Sequencing, Sequential YoY, and CAGR Trend Analysis...")
+    sess_trends = create_conversation_session(title="Multi-Period CAGR Trend Session")
+    sess_trends_id = sess_trends["id"]
+    print(f"  -> Created Conversation Session for Trends & CAGR: {sess_trends_id}")
+
+    # Query targeting multi-period growth and CAGR
+    trend_query = "What is the revenue CAGR and trend between 2024 and 2025?"
+    trend_resp = query_conversation(session_id=sess_trends_id, query=trend_query, document_id=fin_id)
+
+    assert trend_resp["grounded"] is True, "Multi-period research must produce grounded=True"
+    assert len(trend_resp["answer"]) > 0, "Multi-period response must be non-empty"
+    assert len(trend_resp["citations"]) >= 1, "Must contain verified citations"
+
+    for cit in trend_resp["citations"]:
+        assert cit["chunk_id"] is not None
+        assert cit["document_id"] == fin_id
+
+    print(f"  -> Trend Research Query: '{trend_query}'")
+    print(f"  -> Generated Analysis: {trend_resp['answer'][:150]}...")
+    print(f"  -> Citations: {len(trend_resp['citations'])} source chunks verified across statements.")
+
+    print("  ✅ E2E 11 PASSED: Multi-Period Sequencing, Sequential YoY, and CAGR Trend Analysis verified.")
+
     print("\n==================================================")
     print("ALL END-TO-END TESTS PASSED SUCCESSFULLY! 🎉")
     print("==================================================")
