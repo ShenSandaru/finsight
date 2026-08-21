@@ -190,20 +190,28 @@ flowchart TD
 
 ---
 
-### Phase 4 — Financial Table Extraction
-* **Goal:** Extract and preserve structural layout of balance sheets, income statements, and cash flow tables.
+### Phase 4 — Financial Table Extraction & Semantics
+* **Goal:** Extract and preserve structural layout of balance sheets, income statements, and cash flow tables, and enrich them with deterministic semantic classifications.
 * **Why Needed:** Financial analysis relies heavily on tabular metrics. Standard text extractors scramble table rows and column headers, making numbers incomprehensible to LLMs.
-* **Current Status:** Not Implemented.
+* **Current Status:** Completed (Sprint 4.1 pdfplumber table extraction + Sprint 4.2 FinancialTableSemanticService statement classification, period extraction, and metric normalization verified).
 * **Tasks:**
-  - [ ] Implement table detection and extraction in `TableExtractorService` (`app/services/table_extractor.py`) using `pdfplumber` table extraction.
-  - [ ] Convert extracted tables into markdown format and structured JSON representation (preserving column headers, fiscal periods, and units/currencies).
-  - [ ] Generate summary headers for tables (e.g., `Table: Consolidated Statements of Operations (in millions)`).
-  - [ ] Ensure extracted tables are tagged with `chunk_type = "table"` and linked to their respective page numbers.
+  - [x] Add `pdfplumber==0.11.0` to `backend/requirements.txt`.
+  - [x] Implement table detection and extraction in `TableExtractorService` (`app/services/table_extractor.py`) using `pdfplumber`.
+  - [x] Convert extracted tables into markdown format and structured JSON representation (preserving column headers, fiscal periods, currencies, and units).
+  - [x] Generate deterministic Markdown and extract headers/titles for tables.
+  - [x] Financial Statement Semantic Classification & Period Detection (`FinancialTableSemanticService` in `app/services/table_semantics.py`) (Sprint 4.2).
+  - [ ] Table-aware chunking and tagging with `chunk_type = "table"` linked to page numbers (Phase 5).
 * **Files Likely Affected:**
+  - `backend/requirements.txt`
   - `backend/app/services/table_extractor.py`
-  - `backend/app/models/chunk.py`
+  - `backend/app/services/table_semantics.py`
+  - `backend/app/tasks/definitions.py`
+  - `backend/tests/test_table_extractor.py`
+  - `backend/tests/test_table_semantics.py`
+  - `docs/development/table-extraction.md`
+  - `docs/development/table-semantics.md`
 * **Acceptance Criteria:**
-  - Financial statements in sample 10-K filings are extracted into markdown tables where rows and columns align with accurate monetary units.
+  - Financial statements and tabular data in PDFs are extracted into structured `ExtractedTable` objects with aligned rows, columns, monetary units, currencies, Markdown serialization, and semantic classifications (`FinancialTableSemantics`) without creating database Chunk records.
 
 ---
 

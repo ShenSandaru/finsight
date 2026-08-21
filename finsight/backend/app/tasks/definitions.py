@@ -2,6 +2,7 @@ import time
 import uuid
 import logging
 from typing import Any
+from collections import Counter
 
 from sqlalchemy import select
 
@@ -12,6 +13,8 @@ from app.models.document import Document
 from app.services.pdf_parser import PDFParserService
 from app.services.text_parser import TextParserService
 from app.services.csv_parser import CSVParserService
+from app.services.table_extractor import TableExtractorService
+from app.services.table_semantics import FinancialTableSemanticService, StatementType
 
 logger = logging.getLogger("finsight.worker.tasks")
 settings = get_settings()
@@ -19,14 +22,13 @@ settings = get_settings()
 
 async def process_document(ctx: dict[str, Any], document_id_str: str) -> dict[str, Any]:
     """
-    Ingestion task orchestration for Sprint 3.1 & 3.2.
+    Ingestion task orchestration for Sprint 3.1, 3.2, 4.1 & 4.2.
     Loads Document, transitions to 'processing', invokes the appropriate parser
-    (PDFParserService, TextParserService, CSVParserService), updates total_pages and metadata,
-    and advances status to 'parsed'.
+    (PDFParserService, TextParserService, CSVParserService), extracts tables for PDFs
+    via TableExtractorService and enriches them in-memory via FinancialTableSemanticService
+    without storing chunks, updates total_pages and metadata, and advances status to 'parsed'.
     """
     job_id = ctx.get("job_id", "unknown")
-    start_time = time.perf_counter()
-
     try:
         doc_uuid = uuid.UUID(document_id_str)
     except ValueError:
@@ -37,9 +39,9 @@ async def process_document(ctx: dict[str, Any], document_id_str: str) -> dict[st
 
     async with async_session() as session:
         try:
-            result = await session.execute(
-                select(Document).where(Document.id == doc_uuid)
-            )
+            # Fetch document record
+            stmt = select(Document).where(Document.id == doc_uuid)
+            result = await session.execute(stmt)
             document = result.scalar_one_or_none()
 
             if not document:
@@ -48,17 +50,8 @@ async def process_document(ctx: dict[str, Any], document_id_str: str) -> dict[st
 
             # Idempotency guard: only transition if currently in 'pending' status
             if document.status != "pending":
-                logger.info(
-                    "Document '%s' already in status '%s' (skipping duplicate processing) [job_id=%s]",
-                    doc_uuid,
-                    document.status,
-                    job_id,
-                )
-                return {
-                    "status": "skipped",
-                    "document_id": str(doc_uuid),
-                    "current_status": document.status,
-                }
+                logger.info("Document '%s' already in status '%s' (skipping duplicate processing) [job_id=%s]", doc_uuid, document.status, job_id)
+                return {"status": "skipped", "document_id": str(doc_uuid), "current_status": document.status}
 
             # State transition 1: pending -> processing
             document.status = "processing"
@@ -68,9 +61,25 @@ async def process_document(ctx: dict[str, Any], document_id_str: str) -> dict[st
             # Locate stored document file on disk
             file_path = settings.DOCUMENTS_PATH / f"{doc_uuid}_{document.filename}"
 
+            table_count = 0
+            statement_counts: dict[str, int] = {}
             if document.file_type == "pdf":
                 parser = PDFParserService()
                 parsed_doc = parser.extract_text_and_metadata(file_path=file_path, document_id=str(doc_uuid))
+
+                # Extract financial tables in-memory (Sprint 4.1 - no database Chunk rows created)
+                table_extractor = TableExtractorService()
+                extracted_tables = table_extractor.extract_tables_from_pdf(file_path=file_path, document_id=str(doc_uuid))
+                table_count = len(extracted_tables)
+
+                # Enrich tables with semantic classification & period context (Sprint 4.2 - in-memory)
+                semantic_service = FinancialTableSemanticService()
+                for tbl in extracted_tables:
+                    tbl.semantics = semantic_service.analyze_table(tbl)
+
+                raw_counts = Counter(tbl.semantics.statement_type for tbl in extracted_tables if tbl.semantics)
+                statement_counts = dict(raw_counts)
+
             elif document.file_type == "txt":
                 txt_parser = TextParserService()
                 parsed_doc = txt_parser.extract_text_and_metadata(file_path=file_path, document_id=str(doc_uuid))
@@ -91,14 +100,29 @@ async def process_document(ctx: dict[str, Any], document_id_str: str) -> dict[st
             await session.commit()
 
             duration = time.perf_counter() - start_time
-            logger.info(
-                "Successfully parsed %s document '%s' (%d pages) in %.4fs [job_id=%s]",
-                document.file_type.upper(),
-                doc_uuid,
-                parsed_doc.total_pages,
-                duration,
-                job_id,
-            )
+            if document.file_type == "pdf":
+                logger.info(
+                    "Successfully processed PDF document '%s' (%d pages, %d tables extracted [Income Statements: %d, Balance Sheets: %d, Cash Flows: %d, Unknown: %d]) in %.4fs [job_id=%s]",
+                    doc_uuid,
+                    parsed_doc.total_pages,
+                    table_count,
+                    statement_counts.get(StatementType.INCOME_STATEMENT, 0),
+                    statement_counts.get(StatementType.BALANCE_SHEET, 0),
+                    statement_counts.get(StatementType.CASH_FLOW, 0),
+                    statement_counts.get(StatementType.UNKNOWN, 0),
+                    duration,
+                    job_id,
+                )
+            else:
+                logger.info(
+                    "Successfully processed %s document '%s' (%d pages, %d tables extracted) in %.4fs [job_id=%s]",
+                    document.file_type.upper(),
+                    doc_uuid,
+                    parsed_doc.total_pages,
+                    table_count,
+                    duration,
+                    job_id,
+                )
 
             return {
                 "status": "parsed",
@@ -106,6 +130,7 @@ async def process_document(ctx: dict[str, Any], document_id_str: str) -> dict[st
                 "filename": document.filename,
                 "file_type": document.file_type,
                 "total_pages": parsed_doc.total_pages,
+                "tables_extracted": table_count,
                 "duration_seconds": round(duration, 4),
             }
 

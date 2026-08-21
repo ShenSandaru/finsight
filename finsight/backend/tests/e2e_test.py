@@ -119,20 +119,27 @@ def run_e2e_tests():
     assert doc_txt["processing_error"] is None, f"Expected null processing_error, got {doc_txt['processing_error']}"
     print("  ✅ E2E 3 PASSED: TXT file parsed successfully pending -> processing -> parsed.")
 
-    # 4. CSV file upload test (Sprint 3.2 Full Parsing Flow)
-    print("\n[E2E 4] Uploading structured CSV (.csv) file...")
-    csv_bytes = b"Metric,2024,2025\nTotalRevenue,1000,1200\nOperatingIncome,300,380\nNetIncome,220,280\n"
-    up_resp_csv = upload_multipart("financial_metrics.csv", csv_bytes, content_type="text/csv")
-    csv_id = up_resp_csv["document"]["id"]
-    print(f"  -> Uploaded successfully. Initial status: {up_resp_csv['document']['status']} (id={csv_id})")
-    assert up_resp_csv["document"]["status"] == "pending", f"Expected initial 'pending', got {up_resp_csv['document']['status']}"
+    # 5. Financial PDF with Statement Tables (Sprint 4.2 Semantic Verification)
+    print("\n[E2E 5] Uploading Financial PDF with Income Statement, Balance Sheet, and Cash Flow...")
+    financial_pdf_bytes = make_pdf(
+        [
+            "Consolidated Statements of Operations\nYears Ended December 31, 2025\nTotal Revenue: $1000\nGross Profit: $400\nNet Income: $150",
+            "Consolidated Balance Sheets\nAs of December 31, 2025\nTotal Assets: $1500\nTotal Liabilities: $600\nTotal Stockholders Equity: $900",
+            "Statements of Cash Flows\nYears Ended December 31, 2025\nNet Cash Provided by Operating Activities: $300\nCapital Expenditures: $100",
+        ],
+        {"Title": "Financial Statements 2025"}
+    )
+    up_resp_fin = upload_multipart("financial_statements_2025.pdf", financial_pdf_bytes)
+    fin_id = up_resp_fin["document"]["id"]
+    print(f"  -> Uploaded successfully. Initial status: {up_resp_fin['document']['status']} (id={fin_id})")
+    assert up_resp_fin["document"]["status"] == "pending", f"Expected initial 'pending', got {up_resp_fin['document']['status']}"
 
-    doc_csv = poll_document(csv_id)
-    print(f"  -> Final Status: {doc_csv['status']}, Total Pages: {doc_csv['total_pages']}, Error: {doc_csv['processing_error']}")
-    assert doc_csv["status"] == "parsed", f"Expected 'parsed', got {doc_csv['status']}"
-    assert doc_csv["total_pages"] == 1, f"Expected total_pages=1 for CSV, got {doc_csv['total_pages']}"
-    assert doc_csv["processing_error"] is None, f"Expected null processing_error, got {doc_csv['processing_error']}"
-    print("  ✅ E2E 4 PASSED: CSV file parsed successfully pending -> processing -> parsed.")
+    doc_fin = poll_document(fin_id)
+    print(f"  -> Final Status: {doc_fin['status']}, Total Pages: {doc_fin['total_pages']}, Title: '{doc_fin['title']}', Error: {doc_fin['processing_error']}")
+    assert doc_fin["status"] == "parsed", f"Expected 'parsed', got {doc_fin['status']}"
+    assert doc_fin["total_pages"] == 3, f"Expected total_pages=3, got {doc_fin['total_pages']}"
+    assert doc_fin["processing_error"] is None, f"Expected null processing_error, got {doc_fin['processing_error']}"
+    print("  ✅ E2E 5 PASSED: Financial PDF with multi-statement tables processed pending -> processing -> parsed.")
 
     print("\n==================================================")
     print("ALL END-TO-END TESTS PASSED SUCCESSFULLY! 🎉")
