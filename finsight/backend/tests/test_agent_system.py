@@ -475,3 +475,33 @@ class TestFullResearchGraph:
         assert len(final_state["retrieved_chunks"]) == 0
         assert len(final_state["citations"]) == 0
         assert "not find enough" in final_state["final_answer"].lower()
+
+    async def test_12_research_graph_guardrails_validation(self):
+        chunk_id = uuid.uuid4()
+        chunk = RetrievalResult(
+            chunk_id=chunk_id,
+            document_id=uuid.uuid4(),
+            content="Total Revenue: $1,000, Gross Profit: $400",
+            chunk_type="table",
+            chunk_index=0,
+            page_number=1,
+            similarity=0.91,
+            metadata={"statement_type": "income_statement"},
+        )
+
+        mock_retrieval = MockRetrievalService(sample_results=[chunk])
+        research_service = FinancialResearchService(
+            retrieval_service=mock_retrieval,
+            generation_service=FakeGenService(),
+        )
+
+        final_state = await research_service.execute_research(
+            query="Apple 2025 revenue",
+            top_k=5,
+            min_similarity=0.0,
+        )
+
+        assert "guardrails_validation" in final_state
+        assert final_state["guardrails_validation"] is not None
+        assert final_state["guardrails_validation"].passed is True
+        assert final_state["status"] == "validated"

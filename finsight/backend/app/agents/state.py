@@ -83,6 +83,7 @@ class ResearchState(TypedDict):
     retrieved_chunks: list[RetrievalResult]
     findings: list[FinancialFinding]
     citation_audit: CitationAuditResult | None
+    guardrails_validation: Any | None
     final_answer: str | None
     citations: list[SourceCitation]
     grounded: bool

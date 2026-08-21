@@ -21,6 +21,8 @@ Sprint 9.1 introduces a deterministic, multi-agent financial research workflow o
                ├─ No ──→ [No Evidence Fallback] ──→ [END]
                └─ Yes ─→ [Synthesis Node] (Generates grounded financial answer with [SOURCE N] citations)
                            ↓
+                         [Guardrails Output Validation Node] (Validates structure, citations, bounds)
+                           ↓
                          [END]
 ```
 
@@ -29,7 +31,7 @@ Sprint 9.1 introduces a deterministic, multi-agent financial research workflow o
 ## 2. Core Agent Roles & Implementation
 
 ### 1. State Definition (`app/agents/state.py`)
-- `ResearchState`: A TypedDict storing `original_query`, `standalone_query`, `sub_queries`, `retrieved_chunks`, `findings`, `citation_audit`, `final_answer`, `citations`, and `grounded`.
+- `ResearchState`: A TypedDict storing `original_query`, `standalone_query`, `sub_queries`, `retrieved_chunks`, `findings`, `citation_audit`, `guardrails_validation`, `final_answer`, `citations`, and `grounded`.
 - `FinancialFinding`: Pydantic model for structured financial figures and mathematical formulas.
 - `CitationAuditResult`: Comprehensive audit report validating chunk provenance.
 
@@ -53,13 +55,16 @@ Sprint 9.1 introduces a deterministic, multi-agent financial research workflow o
 - Assembles grounded context containing retrieved chunk excerpts and audited financial findings.
 - Invokes `GenerationService` and enforces `validate_and_clean_citations()` to preserve structured citations.
 
+### 7. Guardrails Node (`app/guardrails/response_guard.py`)
+- Executes deterministic post-synthesis validation passes on structure, citation provenance, numerical validity, and grounding guarantees.
+
 ---
 
 ## 3. Verification & Test Results
 
-### Offline Test Suite (`backend/tests/test_agent_system.py` & Full Pytest Suite)
-- **Total Tests Passing**: 207 passed (100% pass rate).
-- Full coverage across individual nodes (Planner, Retriever, Analyzer, Auditor, Synthesis) and end-to-end StateGraph routing.
+### Offline Test Suite (`backend/tests/` Full Pytest Suite)
+- **Total Tests Passing**: 222 passed (100% pass rate).
+- Full coverage across individual nodes (Planner, Retriever, Analyzer, Auditor, Synthesis, Guardrails) and end-to-end StateGraph routing.
 
 ### Docker E2E Verification (`backend/tests/e2e_test.py`)
 - **E2E 1**: 2-page PDF parsed, chunked, and indexed with 1536-dim embeddings.
@@ -70,3 +75,4 @@ Sprint 9.1 introduces a deterministic, multi-agent financial research workflow o
 - **E2E 6**: Grounded single-turn RAG with citations.
 - **E2E 7**: Multi-turn conversation memory, follow-up rewriting, and session isolation.
 - **E2E 8**: **LangGraph Multi-Agent Financial Research System** verified end-to-end in Docker.
+- **E2E 9**: **Guardrails AI Financial Response Validation** verified in Docker.

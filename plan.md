@@ -6,55 +6,33 @@ This document defines the comprehensive, grounded implementation roadmap for **F
 
 ## 1. Actual Current State Assessment
 
-This assessment is strictly grounded on the current repository codebase (`finsight/`), models, services, routes, Docker configuration, and Git history.
+This assessment is strictly grounded on the current repository codebase (`finsight/`), models, services, routes, Docker configuration, and test suites.
 
 ### ✅ Completed & Verified in Code
 * **Container & Infrastructure Orchestration:**
-  * `docker-compose.yml` with PostgreSQL 16 (`pgvector/pgvector:pg16`), Redis 7 Alpine, and FastAPI backend service.
-  * Database initialization script (`scripts/init.sql`) enabling PostgreSQL vector extension (`CREATE EXTENSION IF NOT EXISTS vector;`).
-* **Core Application Configuration & Database Layer:**
-  * Async SQLAlchemy 2.0 engine (`create_async_engine`) and session maker with asyncpg (`app/core/database.py`).
-  * Centralized Pydantic settings management in `app/core/config.py` loading database URLs, Redis URL, file upload limits (50MB), and allowed extensions (`pdf`, `txt`, `csv`).
-  * Database initialization on startup via FastAPI `lifespan` handler (`app/main.py`).
-* **Database Models (SQLAlchemy 2.0 ORM):**
-  * `Document` (`app/models/document.py`): UUID primary key, file metadata (`filename`, `file_type`, `file_size`, `title`, `description`, `source`), status tracking (`status` defaulting to `pending`), page/chunk counts, UTC timestamps, and cascading one-to-many relationship with `Chunk`.
-  * `Chunk` (`app/models/chunk.py`): UUID primary key, foreign key referencing `documents.id`, `content` (Text), `embedding` (`Vector(1536)`), `chunk_type` (`text`, `table`, etc.), `chunk_index`, `page_number`, `metadata_` (JSONB), and relationship back to `Document`.
-  * `Report` (`app/models/report.py`): UUID primary key, `query`, `response`, `sources` (JSONB), `report_type`, `status`, and timestamps.
-* **Document Ingestion & Storage API:**
-  * `DocumentService` (`app/services/document_service.py`): File validation (extension check, max file size), async disk storage (`aiofiles`) in `/app/storage/documents/` with UUID-prefixed filenames, DB record insertion, retrieval (`get_document`, `get_all_documents`), and deletion with local file cleanup.
-  * API endpoints (`app/api/routes/documents.py`):
-    * `POST /api/v1/documents/upload`
-    * `GET /api/v1/documents/`
-    * `GET /api/v1/documents/{document_id}`
-    * `DELETE /api/v1/documents/{document_id}`
-  * Pydantic schemas (`app/schemas/document.py`): `DocumentResponse`, `DocumentUploadResponse`, and `DocumentListResponse`.
-
----
-
-### 🔄 Partially Implemented / Incomplete
-* **Async Background Task Queue:** Redis container is running and healthy, and settings specify `REDIS_URL`, but no Celery / ARQ / Redis queue or background worker logic is wired to `DocumentService`. When a file is uploaded, it is saved with `status = "pending"` but no background job is triggered.
-* **PDF / Document Parsing:** Active Git branch is `feat/pdf-parsing`, but no parser module exists in `app/services/` yet. `requirements.txt` contains basic web and DB libraries (`fastapi`, `uvicorn`, `sqlalchemy`, `asyncpg`, `pgvector`, `redis`, `httpx`, `aiofiles`, `python-multipart`), but no PDF parsing libraries (`pypdf`, `pdfplumber`, `unstructured`, etc.) or AI libraries (`openai`, `langchain`, `langgraph`).
-
----
-
-### ❌ Not Implemented (Documented/Planned Only)
-* **Table-aware parsing & structured financial data extraction.**
-* **Chunking service** (page-aware, section-aware, and financial table preserving).
-* **Embedding generation** (OpenAI / HuggingFace embedding integration).
-* **Vector similarity search & pgvector indexing** (HNSW / IVFFlat indexing and query functions).
-* **RAG query pipeline** (context assembly, citation/evidence tracing, prompt construction).
-* **Multi-Agent Orchestrator** (Retriever, Analyzer, Financial Verification/Critic, and Writer agents).
-* **Query & Report API routes** (`/api/v1/query`, `/api/v1/reports`).
-* **Frontend UI** (`frontend/` directory is currently empty).
-* **Automated Unit & Integration Test Suite** (No `tests/` directory present).
-* **Database Migrations** (Alembic configuration is absent; DB schema is created via `Base.metadata.create_all`).
-
----
-
-### ⚠️ Technical Debt & Pre-requisite Fixes
-1. **Missing Database Migration Tool (Alembic):** Relying on `Base.metadata.create_all` in `lifespan` prevents smooth schema evolution once vector indexes and additional columns are added.
-2. **Missing Async Processing Pipeline:** Document parsing, chunking, and embedding generation are compute- and I/O-intensive. They must not run blocking inside HTTP upload requests.
-3. **Repository Directory Duplication:** The repository root contains an outer wrapper with a nested `finsight/` folder containing the actual backend, docker files, and configs.
+  * `docker-compose.yml` with PostgreSQL 16 (`pgvector/pgvector:pg16`), Redis 7 Alpine, FastAPI backend, and ARQ background worker.
+  * HNSW vector cosine index (`ix_chunks_embedding_hnsw_cosine`) active on `chunks.embedding`.
+* **Document Ingestion & Multi-Format Parsing:**
+  * PDF, TXT, and CSV multi-format ingestion pipelines with magic-byte security validation.
+  * Table extraction (`pdfplumber`) and deterministic semantic financial statement classification (`table_semantics.py`).
+  * Table-aware chunking preserving tabular markdown structures and fiscal period metadata.
+* **Vector Embeddings & Retrieval Foundation:**
+  * Google Gemini embeddings (`gemini-embedding-2`, 1536-dim, `RETRIEVAL_DOCUMENT` / `RETRIEVAL_QUERY`).
+  * In-database pgvector cosine search and HNSW retrieval with 100% Recall@5.
+* **Grounded Single-Turn & Multi-Turn Conversational RAG:**
+  * Grounded answer synthesis via `GenerationService` with structured `[SOURCE N]` citations.
+  * Multi-turn conversational memory (`ConversationSession`, `ConversationMessage`) with follow-up query rewriting and strict session isolation.
+* **Multi-Agent Financial Research (LangGraph):**
+  * Coordinated acyclic `StateGraph` workflow (`Planner -> Retriever -> Analyzer -> Auditor -> Synthesis`).
+  * Deterministic financial ratio calculations (Gross/Net Margins, YoY growth) in Python arithmetic.
+  * Citation auditing validating findings against PostgreSQL chunk records.
+* **Deterministic Guardrails AI Output Validation:**
+  * Pydantic v2 runtime output guardrails layer (`StructureValidator`, `FinancialFindingValidator`, `CitationValidator`, `GroundingConsistencyValidator`, `ResponseGuard`).
+  * Post-synthesis response gatekeeper ensuring citation provenance, non-empty text, and grounding consistency.
+* **Test Verification:**
+  * **222 Pytest unit & integration tests passing** (100% pass rate).
+  * **9 Docker E2E scenarios passing** (E2E 1 through E2E 9).
+  * **Final System Audit:** `PRODUCTION-READY FOUNDATION`.
 
 ---
 
@@ -68,32 +46,36 @@ flowchart TD
 
     subgraph APILayer ["FastAPI Application (app/api/)"]
         DocRoute["/api/v1/documents (Upload / Status)"]
-        QueryRoute["/api/v1/query (Interactive Chat / RAG)"]
-        ReportRoute["/api/v1/reports (In-depth Research)"]
+        SearchRoute["/api/v1/search (Vector Similarity)"]
+        RAGRoute["/api/v1/rag/query (Single-Turn RAG)"]
+        ConvRoute["/api/v1/conversations (Multi-Turn & Research)"]
         HealthRoute["/health"]
     end
 
     subgraph ServiceLayer ["Service Layer (app/services/)"]
         DocSvc["DocumentService"]
-        ParserSvc["PDF / Document Parser"]
-        TableSvc["Financial Table Extractor"]
+        ParserSvc["PDF / TXT / CSV Parser"]
+        TableSvc["Financial Table Extractor & Semantics"]
         ChunkerSvc["Table-Aware Chunker"]
-        EmbedSvc["Embedding Service"]
-        RetrieverSvc["Hybrid / Vector Retriever"]
+        EmbedSvc["EmbeddingService (Gemini 1536-dim)"]
+        RetrieverSvc["RetrievalService (HNSW Cosine)"]
+        ConvSvc["ConversationService & QueryContextService"]
     end
 
-    subgraph AgentLayer ["Multi-Agent Orchestrator (app/agents/)"]
-        Graph["LangGraph Workflow"]
-        RetrieverAgent["Retriever Agent"]
-        AnalyzerAgent["Financial Analyzer Agent"]
-        CriticAgent["Verification & Citation Critic"]
-        WriterAgent["Report Synthesis Agent"]
+    subgraph AgentLayer ["Multi-Agent Research & Guardrails (app/agents/ & app/guardrails/)"]
+        Graph["LangGraph StateGraph"]
+        Planner["Planner Node"]
+        RetrieverAgent["Retriever Node"]
+        Analyzer["Financial Analyzer Node"]
+        Auditor["Citation Auditor Node"]
+        Synthesis["Synthesis Node (GenerationService)"]
+        Guardrails["Deterministic Guardrails (ResponseGuard)"]
     end
 
     subgraph StorageLayer ["Data & Queue Layer"]
-        Storage["Local Disk / Object Storage (/app/storage)"]
-        Redis["Redis (Task Queue / Cache)"]
-        Postgres[("PostgreSQL 16 + pgvector")]
+        Storage["Local Disk (/app/storage)"]
+        Redis["Redis (ARQ Queue / Cache)"]
+        Postgres[("PostgreSQL 16 + pgvector + HNSW")]
     end
 
     UI -->|HTTP / WebSocket| APILayer
@@ -106,14 +88,20 @@ flowchart TD
     ChunkerSvc --> EmbedSvc
     EmbedSvc -->|Store Chunks & Embeddings| Postgres
 
-    QueryRoute --> Graph
-    ReportRoute --> Graph
-    Graph --> RetrieverAgent
+    SearchRoute --> RetrieverSvc
+    RAGRoute --> RetrieverSvc
+    ConvRoute --> ConvSvc
+    ConvSvc --> Graph
+
+    Graph --> Planner
+    Planner --> RetrieverAgent
     RetrieverAgent --> RetrieverSvc
-    RetrieverSvc -->|Similarity Search (cosine)| Postgres
-    Graph --> AnalyzerAgent
-    Graph --> CriticAgent
-    Graph --> WriterAgent
+    RetrieverSvc -->|HNSW Similarity Search| Postgres
+    RetrieverAgent --> Analyzer
+    Analyzer --> Auditor
+    Auditor --> Synthesis
+    Synthesis --> Guardrails
+    Guardrails --> ConvSvc
 ```
 
 ---
@@ -365,50 +353,71 @@ flowchart TD
 
 ---
 
-### Phase 9 — Multi-Agent Financial Research System (LangGraph)
-* **Goal:** Orchestrate specialized AI agents for complex multi-step investment analysis and cross-document synthesis.
-* **Why Needed:** Single-turn RAG is insufficient for multi-document comparisons, financial ratio computations, or deep filing audits.
-* **Current Status:** Not Implemented (`app/agents/` is an empty package).
+### Phase 9 — Multi-Agent Financial Research & Deterministic AI Output Validation (Sprint 9.1 & Sprint 9.2)
+* **Goal:** Orchestrate specialized multi-agent workflows using LangGraph and enforce deterministic runtime validation on AI outputs.
+* **Why Needed:** Complex financial analysis requires multi-period query decomposition, parallel retrieval deduplication, deterministic mathematical calculations (margins, growth), provenance auditing, and strict output safety gates.
+* **Current Status:** **Phase 9 COMPLETE & VERIFIED (Sprint 9.1 LangGraph Multi-Agent Research + Sprint 9.2 Deterministic Output Validation / Guardrails)**.
 * **Tasks:**
-  - [ ] Add `langgraph` and `langchain-core` to `backend/requirements.txt`.
-  - [ ] Define multi-agent state schema (`ResearchState` containing query, retrieved evidence, numerical analysis, audit notes, final report).
-  - [ ] Implement individual agent nodes:
-    - **Retriever Agent:** Dispatches sub-queries across multiple documents.
-    - **Financial Analyzer Agent:** Extracts numerical figures and calculates financial ratios/trends.
-    - **Critic / Verification Agent:** Verifies that every claim and number in the output matches retrieved source chunks.
-    - **Writer Agent:** Synthesizes structured markdown research notes with executive summaries and tables.
-  - [ ] Compile LangGraph state graph with conditional routing and error handling.
-* **Files Likely Affected:**
+  - [x] Add `langgraph==0.2.74`, `langchain-core==0.3.43`, `langsmith==0.2.11`, and `websockets==14.2` to `backend/requirements.txt` (Sprint 9.1).
+  - [x] Define structured Pydantic contracts and TypedDict state in `app/agents/state.py` (`ResearchState`, `PlannerOutput`, `FinancialFinding`, `FinancialAnalysis`, `AuditedFinding`, `CitationAuditResult`) (Sprint 9.1).
+  - [x] Implement deterministic `PlannerNode` (`app/agents/planner.py`) extracting fiscal periods and decomposing queries into bounded subqueries (capped at `AGENT_MAX_SUBQUERIES=4`) (Sprint 9.1).
+  - [x] Implement `RetrieverNode` (`app/agents/retriever.py`) reusing `RetrievalService.search()`, deduplicating chunks by `chunk_id`, and preserving highest similarity (Sprint 9.1).
+  - [x] Implement deterministic `FinancialAnalyzerNode` (`app/agents/financial_analyzer.py`) extracting metrics and computing gross/net margins and YoY growth with Python arithmetic (Sprint 9.1).
+  - [x] Implement `CitationAuditorNode` (`app/agents/citation_auditor.py`) verifying findings against retrieved chunk IDs and rejecting unbacked metrics (Sprint 9.1).
+  - [x] Implement `SynthesisNode` (`app/agents/synthesis.py`) combining retrieved chunks with audited findings and calling `GenerationService` with `validate_and_clean_citations()` (Sprint 9.1).
+  - [x] Compile acyclic `StateGraph(ResearchState)` in `app/agents/graph.py` with conditional routing for insufficient evidence / failed audits (Sprint 9.1).
+  - [x] Implement custom deterministic Guardrails validation layer in `app/guardrails/` (`schemas.py`, `validators.py`, `response_guard.py`) using Pydantic v2 (Sprint 9.2):
+    - [x] `StructureValidator`: Validates non-null, non-empty, and maximum character length bounds (`GUARDRAILS_MAX_RESPONSE_LENGTH`).
+    - [x] `FinancialFindingValidator`: Validates that all findings contain `source_chunk_ids` present in retrieved PostgreSQL evidence, checks for numeric NaN/Inf values, and enforces percentage sanity bounds.
+    - [x] `CitationValidator`: Validates that every citation matches a retrieved chunk ID and strips/re-cleans invalid `[SOURCE N]` references.
+    - [x] `GroundingConsistencyValidator`: Rejects outputs claiming `grounded=True` when zero evidence or citations are available.
+    - [x] `ResponseGuard`: Orchestrates output validation passes and controlled fallbacks without exposing internal stack traces.
+  - [x] Integrate Guardrails output validation node into LangGraph DAG immediately following `synthesis` (Sprint 9.2).
+  - [x] Integrate `ConversationService` (`app/services/conversation_service.py`) with `FinancialResearchService` while maintaining strict session isolation (Sprint 9.1 & 9.2).
+  - [x] Unit, agent, and guardrails test suites passing (222 total pytest tests: 14 Guardrails tests, 12 agent tests, 100% pass rate) (Sprint 9.1 & 9.2).
+  - [x] Docker E2E test suite updated with Scenarios 8 (Multi-Agent Research) and 9 (Guardrails Output Validation) passing (9/9 E2E scenarios) (Sprint 9.1 & 9.2).
+  - [x] Create developer documentation in `docs/development/multi-agent-rag.md` and `docs/development/guardrails.md` (Sprint 9.1 & 9.2).
+* **Files Affected:**
   - `backend/requirements.txt`
+  - `backend/app/core/config.py`
+  - `backend/app/agents/__init__.py`
   - `backend/app/agents/state.py`
-  - `backend/app/agents/nodes/`
-  - `backend/app/agents/orchestrator.py`
+  - `backend/app/agents/planner.py`
+  - `backend/app/agents/retriever.py`
+  - `backend/app/agents/financial_analyzer.py`
+  - `backend/app/agents/citation_auditor.py`
+  - `backend/app/agents/synthesis.py`
+  - `backend/app/agents/graph.py`
+  - `backend/app/guardrails/__init__.py`
+  - `backend/app/guardrails/schemas.py`
+  - `backend/app/guardrails/validators.py`
+  - `backend/app/guardrails/response_guard.py`
+  - `backend/app/services/conversation_service.py`
+  - `backend/tests/test_agent_system.py`
+  - `backend/tests/test_guardrails.py`
+  - `backend/tests/test_conversation_service.py`
+  - `backend/tests/e2e_test.py`
+  - `docs/development/multi-agent-rag.md`
+  - `docs/development/guardrails.md`
+  - `plan.md`
 * **Acceptance Criteria:**
-  - Complex queries (e.g., "Compare gross margin trends between 2022 and 2023 across uploaded 10-Ks") execute through the agent workflow and produce verified, cross-cited reports.
+  - Complex comparative queries execute through the LangGraph DAG (`Planner -> Retriever -> Analyzer -> Auditor -> Synthesis -> Guardrails`); findings and ratios are calculated deterministically; output structure and citations are validated before client delivery; 222 backend tests and 9 Docker E2E scenarios pass cleanly.
 
 ---
 
-### Phase 10 — Query & Report API Endpoints
-* **Goal:** Expose RESTful endpoints for interactive queries and long-form research report generation.
-* **Why Needed:** Provide the client layer with full access to RAG and multi-agent capabilities.
-* **Current Status:** Not Implemented (`Report` model exists; no routes or schemas exist).
+### Phase 10 — Advanced Financial Research Capabilities & Report Endpoints
+* **Goal:** Extend research capabilities with cross-company filing comparisons, deep financial ratio analysis, and asynchronous long-form research report endpoints.
+* **Why Needed:** Enable analysts to run deep comparative financial research across multiple documents and export structured reports.
+* **Current Status:** **PLANNED / NEXT**
 * **Tasks:**
-  - [ ] Create Pydantic schemas: `QueryRequest`, `QueryResponse`, `ReportCreateRequest`, `ReportResponse` (`app/schemas/query.py`, `app/schemas/report.py`).
-  - [ ] Implement query route (`app/api/routes/query.py`):
-    - `POST /api/v1/query` (Synchronous or streaming RAG response with citations).
-  - [ ] Implement report route (`app/api/routes/reports.py`):
-    - `POST /api/v1/reports` (Initiates asynchronous multi-agent research).
-    - `GET /api/v1/reports/{report_id}` (Fetches generated report status and content).
-    - `GET /api/v1/reports` (List historic reports).
-  - [ ] Register new routers in `app/main.py`.
+  - [ ] Advanced financial ratio analysis (Liquidity, Solvency, Efficiency, Profitability metrics).
+  - [ ] Multi-document & cross-company comparative analysis.
+  - [ ] Implement report endpoints (`POST /api/v1/reports`, `GET /api/v1/reports/{id}`, `GET /api/v1/reports`).
+  - [ ] Rich structured markdown financial reports with tabular synthesis and export capabilities.
 * **Files Likely Affected:**
-  - `backend/app/schemas/query.py`
   - `backend/app/schemas/report.py`
-  - `backend/app/api/routes/query.py`
   - `backend/app/api/routes/reports.py`
-  - `backend/app/main.py`
-* **Acceptance Criteria:**
-  - Endpoints validated with interactive Swagger documentation (`/docs`) returning properly typed responses.
+  - `backend/app/services/report_service.py`
 
 ---
 

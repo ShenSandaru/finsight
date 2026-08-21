@@ -16,6 +16,8 @@ from app.services.retrieval_service import RetrievalService
 from app.services.generation_service import GenerationService
 from app.services.rag_service import INSUFFICIENT_EVIDENCE_ANSWER
 
+from app.guardrails.response_guard import ResponseGuard
+
 logger = logging.getLogger("finsight.agents.graph")
 
 
@@ -45,6 +47,40 @@ def route_after_audit(state: ResearchState) -> str:
     return "synthesis"
 
 
+async def guardrails_validator_node(state: ResearchState) -> dict[str, Any]:
+    """
+    Guardrails AI Output Validation Node:
+    Executes deterministic structural, finding, citation, and grounding checks on the synthesized response.
+    """
+    answer = state.get("final_answer")
+    citations = state.get("citations", [])
+    chunks = state.get("retrieved_chunks", [])
+    findings = state.get("findings", [])
+    audit = state.get("citation_audit")
+    grounded = state.get("grounded", True)
+
+    logger.info("Guardrails Node validating synthesized response (citations=%d, chunks=%d)", len(citations), len(chunks))
+
+    guard_res = ResponseGuard.validate_output(
+        answer=answer,
+        citations=citations,
+        retrieved_chunks=chunks,
+        findings=findings,
+        citation_audit=audit,
+        grounded=grounded,
+    )
+
+    return {
+        "final_answer": guard_res.validated_answer,
+        "citations": guard_res.validated_citations,
+        "findings": guard_res.validated_findings,
+        "grounded": guard_res.grounded,
+        "guardrails_validation": guard_res,
+        "step_count": state.get("step_count", 0) + 1,
+        "status": "validated" if guard_res.passed else "validation_failed",
+    }
+
+
 async def no_evidence_handler(state: ResearchState) -> dict[str, Any]:
     """Fallback node producing clean insufficient evidence response without LLM calls."""
     return {
@@ -62,7 +98,7 @@ def build_research_graph(
 ):
     """
     Construct the compiled LangGraph StateGraph for multi-agent financial research:
-    START -> Planner -> Retriever -> (conditional) -> Analyzer -> Auditor -> (conditional) -> Synthesis -> END
+    START -> Planner -> Retriever -> (conditional) -> Analyzer -> Auditor -> (conditional) -> Synthesis -> Guardrails -> END
     """
     retriever_node = RetrieverNode(retrieval_service=retrieval_service)
     synthesis_node = SynthesisNode(generation_service=generation_service)
@@ -75,6 +111,7 @@ def build_research_graph(
     workflow.add_node("financial_analyzer", FinancialAnalyzerNode.analyze)
     workflow.add_node("citation_auditor", CitationAuditorNode.audit)
     workflow.add_node("synthesis", synthesis_node.synthesize)
+    workflow.add_node("guardrails", guardrails_validator_node)
     workflow.add_node("no_evidence", no_evidence_handler)
 
     # 2. Register Edges
@@ -101,7 +138,8 @@ def build_research_graph(
         },
     )
 
-    workflow.add_edge("synthesis", END)
+    workflow.add_edge("synthesis", "guardrails")
+    workflow.add_edge("guardrails", END)
     workflow.add_edge("no_evidence", END)
 
     return workflow.compile()
@@ -148,6 +186,7 @@ class FinancialResearchService:
             "retrieved_chunks": [],
             "findings": [],
             "citation_audit": None,
+            "guardrails_validation": None,
             "final_answer": None,
             "citations": [],
             "grounded": False,
