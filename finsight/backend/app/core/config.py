@@ -23,8 +23,14 @@ class Settings(BaseSettings):
     TASK_MAX_TRIES: int = 3
     TASK_TIMEOUT_SECONDS: int = 300
 
-    # OpenAI
-    OPENAI_API_KEY: str = ""
+    # Gemini & Embedding Configuration
+    GEMINI_API_KEY: str = ""
+    EMBEDDING_PROVIDER: str = "gemini"  # "gemini" or "fake" (for testing)
+    EMBEDDING_MODEL: str = "gemini-embedding-2"
+    EMBEDDING_DIMENSIONS: int = 1536
+    EMBEDDING_BATCH_SIZE: int = 50
+    EMBEDDING_MAX_RETRIES: int = 3
+    EMBEDDING_TIMEOUT_SECONDS: float = 60.0
 
     # File Storage
     STORAGE_PATH: Path = Path("/app/storage")
@@ -56,6 +62,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"
 
 
 @lru_cache()

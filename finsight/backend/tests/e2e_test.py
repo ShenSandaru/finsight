@@ -153,11 +153,12 @@ async def verify_document_chunks_in_db(doc_id_str: str):
         chunks = result.scalars().all()
         assert len(chunks) > 0, f"Expected chunks > 0 for document {doc_id_str}"
         for c in chunks:
-            assert c.embedding is None, f"Chunk {c.id} should have embedding = None"
+            assert c.embedding is not None, f"Chunk {c.id} should have embedding populated"
+            assert len(c.embedding) == 1536, f"Chunk {c.id} vector dimension must be 1536, got {len(c.embedding)}"
             assert c.chunk_type in ("text", "table"), f"Unexpected chunk_type '{c.chunk_type}'"
             assert c.page_number is not None, f"Chunk {c.id} missing page_number"
             assert isinstance(c.metadata_, dict), f"Chunk {c.id} metadata must be a dict"
-        print(f"  -> Database verification: {len(chunks)} Chunk records in PostgreSQL (embedding=NULL confirmed).")
+        print(f"  -> Database verification: {len(chunks)} Chunk records in PostgreSQL (embedding=1536-dim vector confirmed).")
         await isolated_engine.dispose()
         return chunks
 
@@ -180,13 +181,13 @@ def run_e2e_tests():
 
     doc = poll_document(doc_id)
     print(f"  -> Final Status: {doc['status']}, Total Pages: {doc['total_pages']}, Total Chunks: {doc.get('total_chunks')}, Title: '{doc['title']}', Error: {doc['processing_error']}")
-    assert doc["status"] == "parsed", f"Expected 'parsed', got {doc['status']}"
+    assert doc["status"] == "indexed", f"Expected 'indexed', got {doc['status']}"
     assert doc["total_pages"] == 2, f"Expected total_pages=2, got {doc['total_pages']}"
     assert doc.get("total_chunks") == 2, f"Expected total_chunks=2, got {doc.get('total_chunks')}"
     assert doc["title"] == "Apple 10-K Fiscal 2025", f"Expected title set from metadata, got {doc['title']}"
     assert doc["processing_error"] is None, f"Expected null processing_error, got {doc['processing_error']}"
     asyncio.run(verify_document_chunks_in_db(doc_id))
-    print("  ✅ E2E 1 PASSED: Valid PDF processed and chunks persisted.")
+    print("  ✅ E2E 1 PASSED: Valid PDF processed, chunked, and indexed with 1536-dim embeddings.")
 
     # 2. Malformed PDF test (magic bytes valid %PDF- header, broken structure)
     print("\n[E2E 2] Uploading malformed PDF (valid %PDF- header, broken structure)...")
@@ -201,7 +202,7 @@ def run_e2e_tests():
     assert doc_corrupt["processing_error"] is not None, "Expected populated processing_error"
     print("  ✅ E2E 2 PASSED: Malformed PDF cleanly handled pending -> processing -> failed.")
 
-    # 3. TXT file upload test (Sprint 3.2 Full Parsing Flow + Sprint 5.1 Chunking)
+    # 3. TXT file upload test (Sprint 3.2 Full Parsing Flow + Sprint 5.1 Chunking + Sprint 6.1 Embeddings)
     print("\n[E2E 3] Uploading plain text (.txt) file...")
     txt_bytes = b"FinSight Earnings Summary\nQ3 Revenue reached $2.5 billion with 18% YoY growth."
     up_resp_txt = upload_multipart("earnings_summary.txt", txt_bytes, content_type="text/plain")
@@ -211,14 +212,14 @@ def run_e2e_tests():
 
     doc_txt = poll_document(txt_id)
     print(f"  -> Final Status: {doc_txt['status']}, Total Pages: {doc_txt['total_pages']}, Total Chunks: {doc_txt.get('total_chunks')}, Error: {doc_txt['processing_error']}")
-    assert doc_txt["status"] == "parsed", f"Expected 'parsed', got {doc_txt['status']}"
+    assert doc_txt["status"] == "indexed", f"Expected 'indexed', got {doc_txt['status']}"
     assert doc_txt["total_pages"] == 1, f"Expected total_pages=1 for TXT, got {doc_txt['total_pages']}"
     assert doc_txt.get("total_chunks") == 1, f"Expected total_chunks=1 for TXT, got {doc_txt.get('total_chunks')}"
     assert doc_txt["processing_error"] is None, f"Expected null processing_error, got {doc_txt['processing_error']}"
     asyncio.run(verify_document_chunks_in_db(txt_id))
-    print("  ✅ E2E 3 PASSED: TXT file parsed and chunked successfully.")
+    print("  ✅ E2E 3 PASSED: TXT file parsed, chunked, and indexed with 1536-dim embeddings.")
 
-    # 4. Financial PDF with Statement Tables (Sprint 4.1, 4.2 & Sprint 5.1 Table-Aware Verification)
+    # 4. Financial PDF with Statement Tables (Sprint 4.1, 4.2, 5.1 & 6.1 Table-Aware Embedding Verification)
     print("\n[E2E 4] Uploading Financial PDF with Income Statement, Balance Sheet, and Cash Flow tables...")
     financial_pdf_bytes = make_pdf_with_tables(
         [
@@ -258,7 +259,7 @@ def run_e2e_tests():
 
     doc_fin = poll_document(fin_id)
     print(f"  -> Final Status: {doc_fin['status']}, Total Pages: {doc_fin['total_pages']}, Total Chunks: {doc_fin.get('total_chunks')}, Title: '{doc_fin['title']}', Error: {doc_fin['processing_error']}")
-    assert doc_fin["status"] == "parsed", f"Expected 'parsed', got {doc_fin['status']}"
+    assert doc_fin["status"] == "indexed", f"Expected 'indexed', got {doc_fin['status']}"
     assert doc_fin["total_pages"] == 3, f"Expected total_pages=3, got {doc_fin['total_pages']}"
     assert doc_fin.get("total_chunks") >= 3, f"Expected total_chunks>=3, got {doc_fin.get('total_chunks')}"
     assert doc_fin["processing_error"] is None, f"Expected null processing_error, got {doc_fin['processing_error']}"
@@ -276,7 +277,7 @@ def run_e2e_tests():
         assert "fiscal_periods" in tc.metadata_, "Table chunk missing fiscal_periods"
         print(f"    -> Table chunk verified: type={tc.metadata_.get('statement_type')}, periods={tc.metadata_.get('fiscal_periods')}")
 
-    print("  ✅ E2E 4 PASSED: Multi-page Financial PDF chunked into text + semantic table chunks.")
+    print("  ✅ E2E 4 PASSED: Multi-page Financial PDF chunked and indexed with text + semantic table embeddings.")
 
     print("\n==================================================")
     print("ALL END-TO-END TESTS PASSED SUCCESSFULLY! 🎉")

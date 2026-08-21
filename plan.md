@@ -241,21 +241,35 @@ flowchart TD
 ### Phase 6 — Embedding Pipeline & Vector Storage
 * **Goal:** Generate vector embeddings for all document chunks and store them in PostgreSQL via `pgvector`.
 * **Why Needed:** Semantic search requires vector representations of chunk content.
-* **Current Status:** Not Implemented (`Chunk.embedding` column exists in ORM as `Vector(1536)`).
+* **Current Status:** Completed (Sprint 6.1 Google GenAI `gemini-embedding-2` 1536-dimensional embeddings, bounded exponential backoff retry, strict dimension validation, Rule A transaction isolation, whole-document atomic persistence, and Document `status = "indexed"` transition verified).
 * **Tasks:**
-  - [ ] Add `openai` / `tiktoken` to `backend/requirements.txt`.
-  - [ ] Implement `EmbeddingService` (`app/services/embedding_service.py`):
-    - OpenAI `text-embedding-3-small` (1536 dimensions) or configurable provider.
-    - Batch embedding generation with exponential backoff retry.
-    - Token count validation against model limits.
-  - [ ] Bulk update `Chunk.embedding` in database within a transaction.
-  - [ ] Update `Document.status` to `"indexed"` and update `Document.total_chunks`.
+  - [x] Add `google-genai==0.8.0` to `backend/requirements.txt` (Sprint 6.1).
+  - [x] Implement `EmbeddingService` (`app/services/embedding_service.py`) (Sprint 6.1):
+    - [x] Gemini `gemini-embedding-2` model with `RETRIEVAL_DOCUMENT` task type and 1536 output dimensionality.
+    - [x] Deterministic batch embedding generation (batch size = 50) preserving 1-to-1 input-to-output ordering.
+    - [x] Bounded exponential backoff retry policy for transient API errors (rate limit, server error, timeout) up to 3 attempts.
+    - [x] Strict vector dimension validation (ensuring all returned vectors are exactly 1536 floats).
+    - [x] Async client lifecycle management and explicit cleanup via `close()`.
+  - [x] Integrate with background worker pipeline (`app/tasks/definitions.py`) (Sprint 6.1):
+    - [x] Query persisted chunks and invoke `EmbeddingService.embed_chunks` outside of database transactions (Rule A).
+    - [x] Whole-document atomic database persistence with verification (Rule B).
+    - [x] Advance `Document.status` to `"indexed"` upon successful embedding persistence.
+    - [x] Safe failure recording with sanitized `processing_error` in an isolated error transaction.
+    - [x] Zero-chunk handling and idempotency protection (skipping already embedded documents).
+  - [x] Implement comprehensive unit and database test suite (`test_embedding_service.py`) using deterministic offline `FakeGenAIClient` (23 tests passed) (Sprint 6.1).
+  - [x] Update E2E test suite (`e2e_test.py`) with PostgreSQL assertions confirming 1536-dimensional embeddings and `indexed` status (Sprint 6.1).
+  - [ ] Create HNSW or IVFFlat index on `chunks.embedding` using Alembic migration (Sprint 6.2).
+  - [ ] Vector similarity search and RAG retrieval pipelines (Phase 7+).
 * **Files Likely Affected:**
   - `backend/requirements.txt`
   - `backend/app/core/config.py`
   - `backend/app/services/embedding_service.py`
+  - `backend/app/tasks/definitions.py`
+  - `backend/tests/test_embedding_service.py`
+  - `backend/tests/e2e_test.py`
+  - `docs/development/embeddings.md`
 * **Acceptance Criteria:**
-  - All chunks for an uploaded document have non-null 1536-dimensional embeddings stored in PostgreSQL.
+  - Every document chunk is embedded with a 1536-dimensional vector stored in `Chunk.embedding`; `Document.status` reaches `"indexed"`; no DB transaction held during external API calls; zero partial embeddings committed on failure; offline test suite passes completely.
 
 ---
 
