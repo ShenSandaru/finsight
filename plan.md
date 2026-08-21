@@ -238,65 +238,130 @@ flowchart TD
 
 ---
 
-### Phase 6 — Embedding Pipeline & Vector Storage
-* **Goal:** Generate vector embeddings for all document chunks and store them in PostgreSQL via `pgvector`.
-* **Why Needed:** Semantic search requires vector representations of chunk content.
-* **Current Status:** Not Implemented (`Chunk.embedding` column exists in ORM as `Vector(1536)`).
+### Phase 6 — Embedding Pipeline & Vector Retrieval Foundation
+* **Goal:** Generate vector embeddings for all document chunks, store them in PostgreSQL via `pgvector`, and execute exact vector similarity searches.
+* **Why Needed:** Semantic search and RAG require vector representations and deterministic database similarity retrieval.
+* **Current Status:** Completed (Sprint 6.1 Embedding persistence & Document `status = "indexed"` + Sprint 6.2 `RetrievalService`, `POST /api/v1/search`, and in-database pgvector cosine search verified).
 * **Tasks:**
-  - [ ] Add `openai` / `tiktoken` to `backend/requirements.txt`.
-  - [ ] Implement `EmbeddingService` (`app/services/embedding_service.py`):
-    - OpenAI `text-embedding-3-small` (1536 dimensions) or configurable provider.
-    - Batch embedding generation with exponential backoff retry.
-    - Token count validation against model limits.
-  - [ ] Bulk update `Chunk.embedding` in database within a transaction.
-  - [ ] Update `Document.status` to `"indexed"` and update `Document.total_chunks`.
+  - [x] Add `google-genai==0.8.0` to `backend/requirements.txt` (Sprint 6.1).
+  - [x] Implement `EmbeddingService` (`app/services/embedding_service.py`) (Sprint 6.1 & 6.2):
+    - [x] Gemini `gemini-embedding-2` model with `RETRIEVAL_DOCUMENT` task type and 1536 output dimensionality (Sprint 6.1).
+    - [x] Query embedding generation with `RETRIEVAL_QUERY` task semantics via `EmbeddingService.embed_query` (Sprint 6.2).
+    - [x] Deterministic batch embedding generation (batch size = 50) preserving 1-to-1 input-to-output ordering (Sprint 6.1).
+    - [x] Bounded exponential backoff retry policy for transient API errors (rate limit, server error, timeout) up to 3 attempts.
+    - [x] Strict vector dimension validation (ensuring all returned vectors are exactly 1536 floats).
+    - [x] Async client lifecycle management and explicit cleanup via `close()`.
+  - [x] Integrate with background worker pipeline (`app/tasks/definitions.py`) (Sprint 6.1):
+    - [x] Query persisted chunks and invoke `EmbeddingService.embed_chunks` outside of database transactions (Rule A).
+    - [x] Whole-document atomic database persistence with verification (Rule B).
+    - [x] Advance `Document.status` to `"indexed"` upon successful embedding persistence.
+    - [x] Safe failure recording with sanitized `processing_error` in an isolated error transaction.
+    - [x] Zero-chunk handling and idempotency protection (skipping already embedded documents).
+  - [x] Implement `RetrievalService` (`app/services/retrieval_service.py`) (Sprint 6.2):
+    - [x] Structured `RetrievalResult` dataclass preserving metadata, page numbers, and chunk types.
+    - [x] In-database pgvector cosine distance calculation ($1 - \text{cosine\_distance}$).
+    - [x] Filter by `Chunk.embedding IS NOT NULL`, `Document.status == "indexed"`, optional `document_id`, and `min_similarity`.
+    - [x] Deterministic tie-breaking ordering (`similarity DESC, chunk_index ASC, id ASC`).
+    - [x] Top-k limiting and parameter validation ($1 \le \text{top\_k} \le 20$, $0.0 \le \text{min\_similarity} \le 1.0$).
+  - [x] Add `POST /api/v1/search` developer and retrieval endpoint in `app/api/routes/search.py` (Sprint 6.2).
+  - [x] Unit and database integration test suites (`test_embedding_service.py` with 23 tests, `test_retrieval_service.py` with 24 tests) passing with 0 failures (Sprint 6.1 & 6.2).
+  - [x] Update E2E test suite (`e2e_test.py`) with PostgreSQL assertions confirming 1536-dimensional embeddings and vector retrieval against indexed financial statements (Sprint 6.1 & 6.2).
 * **Files Likely Affected:**
   - `backend/requirements.txt`
   - `backend/app/core/config.py`
   - `backend/app/services/embedding_service.py`
+  - `backend/app/services/retrieval_service.py`
+  - `backend/app/schemas/search.py`
+  - `backend/app/api/routes/search.py`
+  - `backend/app/tasks/definitions.py`
+  - `backend/tests/test_embedding_service.py`
+  - `backend/tests/test_retrieval_service.py`
+  - `backend/tests/e2e_test.py`
+  - `docs/development/embeddings.md`
+  - `docs/development/vector-retrieval.md`
 * **Acceptance Criteria:**
-  - All chunks for an uploaded document have non-null 1536-dimensional embeddings stored in PostgreSQL.
+  - Every document chunk is embedded with a 1536-dimensional vector stored in `Chunk.embedding`; `Document.status` reaches `"indexed"`; vector search executes inside PostgreSQL using pgvector cosine distance; all 116 regression tests and 5 E2E pipeline scenarios pass cleanly.
 
 ---
 
-### Phase 7 — Vector Similarity Search & Index Optimization
-* **Goal:** Implement high-performance vector retrieval with HNSW indexing and metadata filtering.
-* **Why Needed:** Efficient and accurate chunk retrieval is the foundation of the RAG pipeline.
-* **Current Status:** Not Implemented.
+### Phase 7 — Grounded RAG Context Assembly & Answer Generation (Sprint 7.1)
+* **Goal:** Build the single-turn grounded RAG question-answering pipeline using pgvector retrieval and Gemini 2.0 Flash generation.
+* **Why Needed:** Enable users to ask natural-language financial research questions and receive grounded answers backed by structured citations directly referencing indexed text and financial table chunks.
+* **Current Status:** **COMPLETED & VERIFIED (Sprint 7.1)**
 * **Tasks:**
-  - [ ] Create HNSW vector index migration on `chunks.embedding` using cosine distance (`vector_cosine_ops`):
-    ```sql
-    CREATE INDEX idx_chunks_embedding_hnsw ON chunks USING hnsw (embedding vector_cosine_ops);
-    ```
-  - [ ] Implement vector search query service in `RetrieverService` (`app/services/retriever.py`):
-    - Cosine similarity query using SQLAlchemy pgvector operator (`Chunk.embedding.cosine_distance(query_embedding)`).
-    - Top-k retrieval with similarity threshold score filtering.
-    - Metadata filtering (by `document_id`, `chunk_type`, or `page_number`).
-* **Files Likely Affected:**
-  - `backend/alembic/versions/`
-  - `backend/app/services/retriever.py`
-* **Acceptance Criteria:**
-  - Given a query vector, the system retrieves the top-k most relevant chunks within <50ms with correct distance scores.
-
----
-
-### Phase 8 — Grounded RAG Query Pipeline
-* **Goal:** Build an end-to-end question answering pipeline that generates verifiable, citation-backed answers.
-* **Why Needed:** Financial analysts require factually accurate answers citing exact document sections and pages.
-* **Current Status:** Not Implemented.
-* **Tasks:**
-  - [ ] Implement `RAGService` (`app/services/rag_service.py`):
-    - Query embedding generation.
-    - Semantic context retrieval.
-    - Strict financial prompt engineering (demanding strict grounding, disallowing speculation, formatting citations).
-    - LLM invocation with OpenAI `gpt-4o` / `gpt-4o-mini`.
-  - [ ] Parse and format citations in responses: e.g., `[Doc: Tesla_2023_10K.pdf, Page: 42, Chunk: 12]`.
-  - [ ] Implement response fallback when confidence is low or information is not present in the indexed documents.
-* **Files Likely Affected:**
+  - [x] Implement `GenerationService` with async `google-genai` SDK, system instructions, and deterministic `FakeGenAIClient` for offline testing (`backend/app/services/generation_service.py`).
+  - [x] Implement structured data contracts `SourceCitation` and `RAGResponse` (`backend/app/services/rag_service.py`).
+  - [x] Implement atomic context assembly with source numbering (`[SOURCE N]`) and 18,000 character limit without splitting chunks.
+  - [x] Implement `RAGService.answer()` with input validation, similarity filtering, and insufficient evidence short-circuiting.
+  - [x] Implement citation validation and sanitization for out-of-bounds citation markers.
+  - [x] Define Pydantic request/response schemas (`backend/app/schemas/rag.py`).
+  - [x] Expose `POST /api/v1/rag/query` endpoint with AsyncSession database dependency (`backend/app/api/routes/rag.py`).
+  - [x] Add comprehensive unit and API test suite with 30 test cases (`backend/tests/test_rag_service.py`).
+  - [x] Add Scenario 6 E2E integration test querying multi-page financial statements in Docker (`backend/tests/e2e_test.py`).
+  - [x] Create comprehensive developer documentation (`docs/development/rag.md`).
+* **Files Affected:**
+  - `backend/app/core/config.py`
+  - `backend/app/services/generation_service.py`
   - `backend/app/services/rag_service.py`
-  - `backend/app/schemas/query.py`
+  - `backend/app/schemas/rag.py`
+  - `backend/app/api/routes/rag.py`
+  - `backend/app/main.py`
+  - `backend/tests/test_rag_service.py`
+  - `backend/tests/e2e_test.py`
+  - `docs/development/rag.md`
+  - `plan.md`
 * **Acceptance Criteria:**
-  - Querying "What was the total revenue in 2023?" returns the exact metric accompanied by source document and page citations.
+  - `POST /api/v1/rag/query` answers financial questions with accurate context and citations.
+  - Returns `grounded: false` without LLM calls when evidence is below relevance threshold.
+  - All 146 backend tests and all 6 Docker E2E scenarios pass cleanly.
+
+---
+
+### Phase 8 — Vector Index Optimization (HNSW) & Conversational Multi-Turn RAG
+* **Goal:** Optimize vector retrieval performance using HNSW indexing and implement session-based conversational memory for multi-turn financial research.
+* **Why Needed:** Enhance vector retrieval scale and support iterative financial analysis workflows.
+* **Current Status:** **Phase 8 COMPLETE & VERIFIED (Sprint 8.1 HNSW Optimization + Sprint 8.2 Conversational Memory)**.
+* **Tasks:**
+  - [x] Add HNSW and benchmark settings (`HNSW_ENABLED`, `HNSW_M`, `HNSW_EF_CONSTRUCTION`, `HNSW_EF_SEARCH`, `RETRIEVAL_RECALL_TARGET`) to `app/core/config.py` (Sprint 8.1).
+  - [x] Create reversible Alembic migration `0003_add_hnsw_index.py` creating `ix_chunks_embedding_hnsw_cosine` on `chunks.embedding` with `vector_cosine_ops` (Sprint 8.1).
+  - [x] Implement `VectorIndexService` (`app/services/vector_index_service.py`) for PostgreSQL catalog verification (`pg_class`, `pg_index`, `pg_am`, `pg_opclass`) (Sprint 8.1).
+  - [x] Update `RetrievalService` with transaction-local `SET LOCAL hnsw.ef_search` tuning (Sprint 8.1).
+  - [x] Create benchmark suite `tests/benchmark_retrieval.py` measuring exact vs HNSW latency percentiles (Avg, P50, P95), Recall@5 (100%), and overlap (100%) (Sprint 8.1).
+  - [x] Create unit and database integration tests in `tests/test_vector_index.py` (20 tests passed) (Sprint 8.1).
+  - [x] Create documentation `docs/development/hnsw-retrieval.md` (Sprint 8.1).
+  - [x] Add conversation settings (`CONVERSATION_MAX_HISTORY_MESSAGES`, `CONVERSATION_MAX_MESSAGE_CHARS`, `CONVERSATION_MAX_SESSIONS_MESSAGES`, `CONVERSATION_FOLLOWUP_REWRITE_ENABLED`) to `app/core/config.py` (Sprint 8.2).
+  - [x] Create ORM models `ConversationSession` and `ConversationMessage` with cascade delete and indexing in `app/models/conversation.py` (Sprint 8.2).
+  - [x] Create reversible Alembic migration `0004_add_conversation_memory.py` (Sprint 8.2).
+  - [x] Create Pydantic schemas in `app/schemas/conversation.py` (Sprint 8.2).
+  - [x] Implement deterministic follow-up resolution service in `app/services/query_context_service.py` (Sprint 8.2).
+  - [x] Implement session orchestration and message lifecycle in `app/services/conversation_service.py` (Sprint 8.2).
+  - [x] Expose REST endpoints in `app/api/routes/conversations.py` (`POST /`, `GET /{id}`, `GET /{id}/messages`, `DELETE /{id}`, `POST /{id}/query`) (Sprint 8.2).
+  - [x] Create 30 unit, catalog, and integration tests in `tests/test_conversation_service.py` (Sprint 8.2).
+  - [x] Update Docker E2E test suite `tests/e2e_test.py` with Scenario 7 multi-turn conversation and session isolation (Sprint 8.2).
+  - [x] Create developer documentation `docs/development/conversational-rag.md` (Sprint 8.2).
+* **Files Affected:**
+  - `backend/app/core/config.py`
+  - `backend/app/models/conversation.py`
+  - `backend/app/models/__init__.py`
+  - `backend/alembic/versions/0003_add_hnsw_index.py`
+  - `backend/alembic/versions/0004_add_conversation_memory.py`
+  - `backend/alembic/env.py`
+  - `backend/app/schemas/conversation.py`
+  - `backend/app/services/vector_index_service.py`
+  - `backend/app/services/query_context_service.py`
+  - `backend/app/services/conversation_service.py`
+  - `backend/app/services/retrieval_service.py`
+  - `backend/app/api/routes/conversations.py`
+  - `backend/app/main.py`
+  - `backend/tests/benchmark_retrieval.py`
+  - `backend/tests/test_vector_index.py`
+  - `backend/tests/test_conversation_service.py`
+  - `backend/tests/e2e_test.py`
+  - `docs/development/hnsw-retrieval.md`
+  - `docs/development/conversational-rag.md`
+  - `plan.md`
+* **Acceptance Criteria:**
+  - HNSW index is active in PostgreSQL; Recall@5 reaches 100%; multi-turn conversations persist message history; follow-ups resolve deterministically; session isolation is strict; all 196 backend tests and all 7 Docker E2E scenarios pass cleanly.
 
 ---
 
