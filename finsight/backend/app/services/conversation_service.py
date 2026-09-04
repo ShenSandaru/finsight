@@ -15,6 +15,7 @@ from app.schemas.conversation import (
     ConversationSessionResponse,
     ConversationMessageResponse,
     ConversationQueryResponse,
+    FinancialFindingResponse,
 )
 from app.schemas.rag import CitationResponse
 from app.services.query_context_service import QueryContextService
@@ -275,6 +276,7 @@ class ConversationService:
             citations = rag_response.citations
             grounded = rag_response.grounded
             retrieved_count = rag_response.retrieved_chunks
+            findings_data = []
         else:
             research_state = await self.research_service.execute_research(
                 query=query.strip(),
@@ -289,6 +291,7 @@ class ConversationService:
             citations = research_state.get("citations", [])
             grounded = research_state.get("grounded", False)
             retrieved_count = len(research_state.get("retrieved_chunks", []))
+            findings_data = research_state.get("findings", [])
 
         # Step 6: Persist assistant answer
         await self.add_message(
@@ -312,12 +315,27 @@ class ConversationService:
             for c in citations
         ]
 
+        # Step 8: Build Findings response list
+        finding_items = [
+            FinancialFindingResponse(
+                metric=f.metric,
+                period=f.period,
+                value=f.value,
+                unit=f.unit,
+                document_id=f.document_id,
+                source_chunk_ids=f.source_chunk_ids,
+                calculation=f.calculation,
+            )
+            for f in findings_data
+        ]
+
         return ConversationQueryResponse(
             session_id=session_id,
             query=query.strip(),
             resolved_query=resolved_retrieval_query if resolved_retrieval_query != query.strip() else None,
             answer=final_answer,
             citations=citation_items,
+            findings=finding_items,
             retrieved_chunks=retrieved_count,
             grounded=grounded,
         )

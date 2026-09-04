@@ -5,10 +5,12 @@ from pathlib import Path
 from fastapi import UploadFile, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
 from app.core.exceptions import FileValidationError, DocumentNotFoundError
 from app.models.document import Document
+from app.models.chunk import Chunk
 
 settings = get_settings()
 
@@ -221,3 +223,14 @@ class DocumentService:
         await self.db.delete(document)
 
         return True
+
+    async def get_chunk(self, chunk_id: uuid.UUID) -> Chunk | None:
+        """
+        Get a specific evidence chunk by ID with its parent document relationship loaded.
+        """
+        result = await self.db.execute(
+            select(Chunk)
+            .options(selectinload(Chunk.document))
+            .where(Chunk.id == chunk_id)
+        )
+        return result.scalar_one_or_none()

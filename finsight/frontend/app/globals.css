@@ -1,0 +1,118 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Base Color Tokens (Slate/Navy Professional Research Theme) */
+    --background: 220 20% 98%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    /* Brand Primary - Deep Navy Blue (Trust, Institutional Precision) */
+    --primary: 221 83% 53%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 215 25% 93%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 215 20% 94%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 215 25% 91%;
+    --accent-foreground: 222 47% 11%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 221 83% 53%;
+
+    --radius: 0.5rem;
+
+    /* Financial Domain Semantic Tokens (Light Theme) */
+    --finance-positive: 142 76% 36%;
+    --finance-positive-foreground: 142 76% 20%;
+    --finance-positive-muted: 142 60% 95%;
+
+    --finance-negative: 0 72% 51%;
+    --finance-negative-foreground: 0 72% 35%;
+    --finance-negative-muted: 0 85% 97%;
+
+    --finance-warning: 38 92% 50%;
+    --finance-warning-foreground: 38 92% 30%;
+    --finance-warning-muted: 48 100% 96%;
+
+    --finance-neutral: 215 16% 47%;
+    --finance-neutral-foreground: 222 47% 11%;
+    --finance-neutral-muted: 215 20% 95%;
+  }
+
+  .dark {
+    --background: 222 47% 10%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 47% 13%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 13%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 217 91% 60%;
+    --primary-foreground: 222 47% 10%;
+
+    --secondary: 217 33% 20%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217 33% 18%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 217 33% 22%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 63% 45%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217 33% 22%;
+    --input: 217 33% 22%;
+    --ring: 217 91% 60%;
+
+    /* Financial Domain Semantic Tokens (Dark Theme) */
+    --finance-positive: 142 70% 45%;
+    --finance-positive-foreground: 142 70% 90%;
+    --finance-positive-muted: 144 61% 16%;
+
+    --finance-negative: 0 75% 60%;
+    --finance-negative-foreground: 0 75% 95%;
+    --finance-negative-muted: 0 63% 18%;
+
+    --finance-warning: 38 92% 60%;
+    --finance-warning-foreground: 38 92% 95%;
+    --finance-warning-muted: 32 81% 18%;
+
+    --finance-neutral: 215 20% 65%;
+    --finance-neutral-foreground: 210 40% 98%;
+    --finance-neutral-muted: 217 33% 18%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Financial tabular numbers utility for financial data */
+  .font-tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
