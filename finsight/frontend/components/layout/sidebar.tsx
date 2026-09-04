@@ -42,7 +42,6 @@ const navItems: NavItem[] = [
     title: "Research",
     href: "/research",
     icon: MessageSquareText,
-    badge: "Soon",
     activePattern: (p) => Boolean(p?.startsWith("/research")),
   },
   {

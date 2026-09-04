@@ -99,9 +99,13 @@ export function useConversationQuery(sessionId: string) {
       // Invalidate message history and session metadata for the active session
       queryClient.invalidateQueries({
         queryKey: ["conversations", "messages", sessionId],
+        exact: false,
       });
       queryClient.invalidateQueries({
         queryKey: queryKeys.conversations.detail(sessionId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.all(),
       });
     },
   });

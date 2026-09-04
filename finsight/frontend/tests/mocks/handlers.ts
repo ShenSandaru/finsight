@@ -60,8 +60,26 @@ export const handlers = [
   }),
 
   // Conversations
-  http.post("*/api/v1/conversations", async () => {
-    return HttpResponse.json(mockSession, { status: 201 });
+  http.post("*/api/v1/conversations", async ({ request }) => {
+    let body: any = {};
+    try {
+      body = await request.json();
+    } catch {
+      // empty body
+    }
+    // If request specifies title like "New Research Inquiry" or empty, return newly initialized session
+    // otherwise if it's the domain services test title "Apple FY2025 Margin Analysis", return mockSession
+    if (body?.title === "Apple FY2025 Margin Analysis") {
+      return HttpResponse.json(mockSession, { status: 201 });
+    }
+
+    const newSession = {
+      ...mockSession,
+      id: "new-session-" + Math.random().toString(36).substring(2, 9),
+      title: body?.title || mockSession.title,
+      message_count: 0,
+    };
+    return HttpResponse.json(newSession, { status: 201 });
   }),
 
   http.get("*/api/v1/conversations/:id", ({ params }) => {
@@ -75,8 +93,11 @@ export const handlers = [
     });
   }),
 
-  http.get("*/api/v1/conversations/:id/messages", () => {
-    return HttpResponse.json(mockMessages);
+  http.get("*/api/v1/conversations/:id/messages", ({ params }) => {
+    if (params.id === mockSession.id) {
+      return HttpResponse.json(mockMessages);
+    }
+    return HttpResponse.json([]);
   }),
 
   http.post("*/api/v1/conversations/:id/query", async () => {
