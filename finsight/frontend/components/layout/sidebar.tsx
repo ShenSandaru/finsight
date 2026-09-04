@@ -48,7 +48,6 @@ const navItems: NavItem[] = [
     title: "Reports",
     href: "/reports",
     icon: FileBarChart2,
-    badge: "Soon",
     activePattern: (p) => Boolean(p?.startsWith("/reports")),
   },
   {

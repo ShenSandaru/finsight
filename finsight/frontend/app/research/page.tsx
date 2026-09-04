@@ -21,6 +21,9 @@ import {
 } from "@/hooks/use-conversations";
 import { useUiStore } from "@/stores/ui-store";
 import { CitationDrawer } from "@/components/citations/citation-drawer";
+import { GenerateReportModal } from "@/components/reports/generate-report-modal";
+import { Button } from "@/components/ui/button";
+import { FileBarChart2 } from "lucide-react";
 import type {
   ConversationSessionResponse,
   CitationResponse,
@@ -37,6 +40,7 @@ export default function ResearchPage() {
   const [activeCitations, setActiveCitations] = useState<CitationResponse[]>([]);
   const [activeFindings, setActiveFindings] = useState<FinancialFinding[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
   const selectedDocumentIds = useUiStore((state) => state.selectedDocumentIds);
 
@@ -222,6 +226,17 @@ export default function ResearchPage() {
                 Grounded multi-agent conversational RAG with LangGraph & citation auditing
               </p>
             </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsReportModalOpen(true)}
+              className="text-xs h-8 gap-1.5"
+              data-testid="research-generate-report-btn"
+            >
+              <FileBarChart2 className="h-3.5 w-3.5 text-primary" />
+              <span>Generate Report</span>
+            </Button>
           </div>
 
           {/* Error Notification Bar */}
@@ -291,6 +306,13 @@ export default function ResearchPage() {
           </div>
         </div>
       </div>
+
+      {/* Generate Report Modal (Phase 11.7) */}
+      <GenerateReportModal
+        open={isReportModalOpen}
+        onOpenChange={setIsReportModalOpen}
+        defaultTitle={activeSession?.title ? `Research Report: ${activeSession.title}` : undefined}
+      />
 
       {/* Citation & Evidence Inspector Drawer (Phase 11.5) */}
       <CitationDrawer />
