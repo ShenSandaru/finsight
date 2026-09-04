@@ -61,6 +61,19 @@ export interface DocumentListResponse {
   documents: DocumentResponse[];
 }
 
+export interface DocumentChunkResponse {
+  id: string; // UUID
+  document_id: string; // UUID
+  document_title: string | null;
+  document_filename: string | null;
+  content: string;
+  chunk_type: "text" | "table" | string;
+  chunk_index: number;
+  page_number: number | null;
+  metadata?: Record<string, unknown> | null;
+  created_at: string; // ISO 8601
+}
+
 export interface DocumentUploadParams {
   file: File;
   title?: string;

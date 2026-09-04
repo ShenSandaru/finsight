@@ -37,3 +37,21 @@ class DocumentListResponse(BaseModel):
 
     total: int
     documents: list[DocumentResponse]
+
+
+class DocumentChunkResponse(BaseModel):
+    """Schema for individual document evidence chunk returned by the API."""
+
+    id: uuid.UUID
+    document_id: uuid.UUID
+    document_title: str | None = None
+    document_filename: str | None = None
+    content: str
+    chunk_type: str
+    chunk_index: int
+    page_number: int | None = None
+    metadata: dict | None = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

@@ -32,6 +32,11 @@ class DocumentNotFoundError(NotFoundError):
     pass
 
 
+class ChunkNotFoundError(NotFoundError):
+    """Raised when a specific chunk ID is not found."""
+    pass
+
+
 class ServiceError(FinSightError):
     """Raised when an internal business logic or service operation fails."""
     pass

@@ -37,6 +37,9 @@ export function MessageBubble({
             key={`citation-${index}-${sourceNum}`}
             sourceNumber={sourceNum}
             chunkId={matchingCitation?.chunk_id}
+            similarity={matchingCitation?.similarity}
+            statementType={matchingCitation?.statement_type}
+            fiscalPeriods={matchingCitation?.fiscal_periods}
           />
         );
       }

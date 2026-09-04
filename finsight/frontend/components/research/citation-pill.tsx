@@ -9,12 +9,18 @@ import { useUiStore } from "@/stores/ui-store";
 interface CitationPillProps {
   sourceNumber: string | number;
   chunkId?: string | null;
+  similarity?: number | null;
+  statementType?: string | null;
+  fiscalPeriods?: string[] | null;
   className?: string;
 }
 
 export function CitationPill({
   sourceNumber,
   chunkId,
+  similarity,
+  statementType,
+  fiscalPeriods,
   className,
 }: CitationPillProps) {
   const openCitationDrawer = useUiStore((state) => state.openCitationDrawer);
@@ -22,7 +28,12 @@ export function CitationPill({
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
     if (chunkId) {
-      openCitationDrawer(chunkId);
+      openCitationDrawer(chunkId, {
+        sourceNumber,
+        similarity,
+        statementType,
+        fiscalPeriods,
+      });
     }
   };
 

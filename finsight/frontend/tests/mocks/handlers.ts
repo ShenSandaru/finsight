@@ -11,6 +11,8 @@ import {
   mockConversationQueryResponse,
   mockReport,
   mockReportList,
+  mockTextChunk,
+  mockTableChunk,
 } from "./data";
 
 export const handlers = [
@@ -22,6 +24,27 @@ export const handlers = [
   // Documents
   http.get("*/api/v1/documents/", () => {
     return HttpResponse.json(mockDocumentList);
+  }),
+
+  http.get("*/api/v1/documents/chunks/:id", ({ params }) => {
+    const { id } = params;
+    if (id === "not-found" || id === "missing-chunk") {
+      return HttpResponse.json(
+        {
+          error: {
+            code: "NOT_FOUND",
+            message: `Evidence chunk with ID '${id}' not found`,
+            details: { chunk_id: id },
+          },
+        },
+        { status: 404 }
+      );
+    }
+    if (id === mockTableChunk.id) {
+      return HttpResponse.json(mockTableChunk);
+    }
+    // Default to mockTextChunk or matching ID
+    return HttpResponse.json({ ...mockTextChunk, id: String(id) });
   }),
 
   http.get("*/api/v1/documents/:id", ({ params }) => {

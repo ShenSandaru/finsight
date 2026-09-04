@@ -20,6 +20,7 @@ import {
   useConversationSession,
 } from "@/hooks/use-conversations";
 import { useUiStore } from "@/stores/ui-store";
+import { CitationDrawer } from "@/components/citations/citation-drawer";
 import type { ConversationSessionResponse, CitationResponse, ConversationMessageResponse } from "@/types/api";
 
 export default function ResearchPage() {
@@ -280,6 +281,9 @@ export default function ResearchPage() {
           </div>
         </div>
       </div>
+
+      {/* Citation & Evidence Inspector Drawer (Phase 11.5) */}
+      <CitationDrawer />
     </AppShell>
   );
 }

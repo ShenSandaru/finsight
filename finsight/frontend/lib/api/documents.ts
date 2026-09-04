@@ -4,6 +4,7 @@ import type {
   DocumentListResponse,
   DocumentUploadResponse,
   DocumentUploadParams,
+  DocumentChunkResponse,
 } from "@/types/api";
 
 /**
@@ -60,6 +61,16 @@ export const documentsApi = {
   async delete(documentId: string, signal?: AbortSignal): Promise<null> {
     return apiClient<null>(`/api/v1/documents/${documentId}`, {
       method: "DELETE",
+      signal,
+    });
+  },
+
+  /**
+   * Retrieve exact evidence chunk content and metadata by chunk ID
+   * GET /api/v1/documents/chunks/{chunkId}
+   */
+  async getChunk(chunkId: string, signal?: AbortSignal): Promise<DocumentChunkResponse> {
+    return apiClient<DocumentChunkResponse>(`/api/v1/documents/chunks/${chunkId}`, {
       signal,
     });
   },

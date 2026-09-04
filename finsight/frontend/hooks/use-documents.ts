@@ -11,6 +11,7 @@ import type {
   DocumentListResponse,
   DocumentUploadParams,
   DocumentUploadResponse,
+  DocumentChunkResponse,
 } from "@/types/api";
 
 /**
@@ -88,5 +89,25 @@ export function useDeleteDocument() {
         queryKey: queryKeys.documents.detail(documentId),
       });
     },
+  });
+}
+
+/**
+ * Hook to retrieve exact source evidence chunk by ID for citation inspection.
+ * Lazy loaded when citation drawer is active.
+ */
+export function useCitationChunk(
+  chunkId: string | null,
+  options?: Partial<UseQueryOptions<DocumentChunkResponse, Error>>
+) {
+  return useQuery({
+    queryKey: queryKeys.documents.chunk(chunkId || ""),
+    queryFn: ({ signal }) => {
+      if (!chunkId) throw new Error("Chunk ID is required for citation inspection");
+      return documentsApi.getChunk(chunkId, signal);
+    },
+    enabled: Boolean(chunkId),
+    staleTime: 5 * 60 * 1000, // 5 minutes cache
+    ...options,
   });
 }

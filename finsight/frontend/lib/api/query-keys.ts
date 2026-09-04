@@ -14,6 +14,7 @@ export const queryKeys = {
     all: () => ["documents"] as const,
     list: () => ["documents", "list"] as const,
     detail: (id: string) => ["documents", "detail", id] as const,
+    chunk: (id: string) => ["documents", "chunk", id] as const,
   },
 
   // Search

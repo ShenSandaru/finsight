@@ -10,6 +10,7 @@ import type {
   ReportResponse,
   ReportListResponse,
   HealthResponse,
+  DocumentChunkResponse,
 } from "@/types/api";
 
 export const mockHealthResponse: HealthResponse = {
@@ -179,4 +180,37 @@ export const mockReport: ReportResponse = {
 export const mockReportList: ReportListResponse = {
   total: 1,
   reports: [mockReport],
+};
+
+export const mockTextChunk: DocumentChunkResponse = {
+  id: "33333333-3333-3333-3333-333333333333",
+  document_id: "11111111-1111-1111-1111-111111111111",
+  document_title: "Apple Inc. FY2025 Form 10-K",
+  document_filename: "apple_10k_2025.pdf",
+  content: "Total net sales were $412,000 million in fiscal year 2025, compared to $383,285 million in 2024.",
+  chunk_type: "text",
+  chunk_index: 12,
+  page_number: 28,
+  metadata: {
+    section: "Item 7. Management's Discussion and Analysis",
+    period: "FY2025",
+  },
+  created_at: "2026-08-24T10:02:00Z",
+};
+
+export const mockTableChunk: DocumentChunkResponse = {
+  id: "77777777-7777-7777-7777-777777777777",
+  document_id: "11111111-1111-1111-1111-111111111111",
+  document_title: "Apple Inc. FY2025 Form 10-K",
+  document_filename: "apple_10k_2025.pdf",
+  content: "| Line Item | FY2025 ($M) | FY2024 ($M) |\n| :--- | :--- | :--- |\n| Total Net Sales | $412,000 | $383,285 |\n| Cost of Sales | $221,500 | $210,350 |\n| Gross Margin | $190,500 | $172,935 |\n| Gross Margin % | 46.23% | 45.12% |",
+  chunk_type: "table",
+  chunk_index: 15,
+  page_number: 29,
+  metadata: {
+    table_title: "Consolidated Statements of Operations",
+    statement_type: "income_statement",
+    fiscal_periods: ["2025", "2024"],
+  },
+  created_at: "2026-08-24T10:02:05Z",
 };
