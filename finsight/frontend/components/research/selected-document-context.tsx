@@ -4,7 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Files, ExternalLink, X } from "lucide-react";
+import { Files, ExternalLink, X, GitCompare } from "lucide-react";
 import { useUiStore } from "@/stores/ui-store";
 import { useDocuments } from "@/hooks/use-documents";
 
@@ -59,6 +59,19 @@ export function SelectedDocumentContext({ className }: SelectedDocumentContextPr
         </div>
 
         <div className="flex items-center gap-1">
+          {selectedDocumentIds.length >= 2 && (
+            <Link href="/compare">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-5 px-1.5 text-[11px] text-primary hover:text-primary gap-1 font-medium"
+                data-testid="research-compare-shortcut-btn"
+              >
+                <GitCompare className="h-3 w-3" />
+                <span>Compare</span>
+              </Button>
+            </Link>
+          )}
           <Link href="/documents">
             <Button variant="ghost" size="sm" className="h-5 px-1.5 text-[11px] text-muted-foreground hover:text-foreground">
               Manage

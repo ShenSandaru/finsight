@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
+import Link from "next/link";
 import {
   Upload,
   Files,
@@ -17,6 +18,7 @@ import {
   RefreshCw,
   FolderOpen,
   Filter,
+  GitCompare,
 } from "lucide-react";
 import { useDocuments } from "@/hooks/use-documents";
 import { useUiStore } from "@/stores/ui-store";
@@ -280,6 +282,20 @@ export default function DocumentsPage() {
                   <Badge variant="financePositive" className="text-xs px-2 py-0.5">
                     {selectedDocumentIds.length} filing{selectedDocumentIds.length > 1 ? "s" : ""} selected
                   </Badge>
+
+                  {selectedDocumentIds.length >= 2 && (
+                    <Link href="/compare">
+                      <Button
+                        size="sm"
+                        className="h-6 px-2.5 text-xs gap-1.5 font-semibold"
+                        data-testid="compare-selected-docs-btn"
+                      >
+                        <GitCompare className="h-3 w-3" />
+                        <span>Compare Filings ({selectedDocumentIds.length})</span>
+                      </Button>
+                    </Link>
+                  )}
+
                   <Button
                     variant="ghost"
                     size="sm"

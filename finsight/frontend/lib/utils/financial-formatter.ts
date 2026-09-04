@@ -68,6 +68,12 @@ function formatMetricWords(metric: string): string {
 export function formatPeriod(rawPeriod: string): string {
   if (!rawPeriod) return "";
 
+  // Comparison period: e.g. '2025_docB_vs_docA'
+  if (rawPeriod.includes("_docB_vs_docA")) {
+    const basePeriod = rawPeriod.replace("_docB_vs_docA", "");
+    return /^\d{4}$/.test(basePeriod) ? `FY${basePeriod} (Doc B vs Doc A)` : `${basePeriod} (Doc B vs Doc A)`;
+  }
+
   // YoY comparison: '2025_vs_2024'
   if (rawPeriod.includes("_vs_")) {
     const [curr, prev] = rawPeriod.split("_vs_");
@@ -227,11 +233,14 @@ function extractSequence(calc: string): string | undefined {
 /**
  * Classification categorization for presentation grouping
  */
-export type FindingCategory = "metric" | "ratio" | "growth" | "cagr" | "trend";
+export type FindingCategory = "metric" | "ratio" | "growth" | "cagr" | "trend" | "comparison";
 
 export function categorizeFinding(finding: FinancialFinding): FindingCategory {
   const metric = finding.metric.toLowerCase();
 
+  if (metric.endsWith("_comparison") || metric.endsWith("_absolute_difference")) {
+    return "comparison";
+  }
   if (metric.endsWith("_trend") || finding.unit.toLowerCase() === "trend") {
     return "trend";
   }

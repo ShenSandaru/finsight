@@ -9,6 +9,7 @@ import {
   mockSession,
   mockMessages,
   mockConversationQueryResponse,
+  mockComparisonQueryResponse,
   mockReport,
   mockReportList,
   mockTextChunk,
@@ -123,8 +124,23 @@ export const handlers = [
     return HttpResponse.json([]);
   }),
 
-  http.post("*/api/v1/conversations/:id/query", async () => {
-    return HttpResponse.json(mockConversationQueryResponse);
+  http.post("*/api/v1/conversations/:id/query", async ({ request, params }) => {
+    let body: any = {};
+    try {
+      body = await request.json();
+    } catch {
+      // empty
+    }
+    if (body?.document_ids && Array.isArray(body.document_ids) && body.document_ids.length >= 2) {
+      return HttpResponse.json({
+        ...mockComparisonQueryResponse,
+        session_id: String(params.id),
+      });
+    }
+    return HttpResponse.json({
+      ...mockConversationQueryResponse,
+      session_id: String(params.id),
+    });
   }),
 
   // Reports

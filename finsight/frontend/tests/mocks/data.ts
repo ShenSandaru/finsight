@@ -36,7 +36,7 @@ export const mockDocument: DocumentResponse = {
   updated_at: "2026-08-24T10:02:00Z",
 };
 
-export const mockProcessingDocument: DocumentResponse = {
+export const mockDocumentB: DocumentResponse = {
   id: "22222222-2222-2222-2222-222222222222",
   filename: "microsoft_10k_2025.pdf",
   file_type: "pdf",
@@ -44,17 +44,33 @@ export const mockProcessingDocument: DocumentResponse = {
   title: "Microsoft Corp FY2025 10-K",
   description: "Annual report",
   source: "SEC EDGAR",
-  status: "processing",
+  status: "indexed",
   processing_error: null,
-  total_pages: null,
-  total_chunks: null,
+  total_pages: 68,
+  total_chunks: 120,
   created_at: "2026-08-24T10:05:00Z",
   updated_at: "2026-08-24T10:05:30Z",
 };
 
 export const mockDocumentList: DocumentListResponse = {
   total: 2,
-  documents: [mockDocument, mockProcessingDocument],
+  documents: [mockDocument, mockDocumentB],
+};
+
+export const mockProcessingDocument: DocumentResponse = {
+  id: "88888888-8888-8888-8888-888888888888",
+  filename: "nvidia_10k_2025.pdf",
+  file_type: "pdf",
+  file_size: 1572864,
+  title: "NVIDIA Corp FY2025 10-K",
+  description: "Annual report",
+  source: "SEC EDGAR",
+  status: "processing",
+  processing_error: null,
+  total_pages: null,
+  total_chunks: null,
+  created_at: "2026-08-24T10:06:00Z",
+  updated_at: "2026-08-24T10:06:30Z",
 };
 
 export const mockDocumentUploadResponse: DocumentUploadResponse = {
@@ -178,6 +194,93 @@ export const mockFinancialFindings: FinancialFinding[] = [
   },
 ];
 
+export const mockComparisonFindings: FinancialFinding[] = [
+  // Document A (Apple) Base Findings
+  {
+    metric: "revenue",
+    period: "2025",
+    value: 412000,
+    unit: "$",
+    document_id: "11111111-1111-1111-1111-111111111111",
+    source_chunk_ids: ["33333333-3333-3333-3333-333333333333"],
+  },
+  {
+    metric: "gross_margin",
+    period: "2025",
+    value: 46.23,
+    unit: "%",
+    document_id: "11111111-1111-1111-1111-111111111111",
+    source_chunk_ids: ["77777777-7777-7777-7777-777777777777"],
+  },
+  // Document B (Microsoft) Base Findings
+  {
+    metric: "revenue",
+    period: "2025",
+    value: 245000,
+    unit: "$",
+    document_id: "22222222-2222-2222-2222-222222222222",
+    source_chunk_ids: ["44444444-4444-4444-4444-444444444444"],
+  },
+  {
+    metric: "gross_margin",
+    period: "2025",
+    value: 69.45,
+    unit: "%",
+    document_id: "22222222-2222-2222-2222-222222222222",
+    source_chunk_ids: ["44444444-4444-4444-4444-444444444444"],
+  },
+  // Backend Deterministic Cross-Document Absolute Differences
+  {
+    metric: "revenue_absolute_difference",
+    period: "2025_docB_vs_docA",
+    value: -167000,
+    unit: "$",
+    document_id: null,
+    source_chunk_ids: [
+      "33333333-3333-3333-3333-333333333333",
+      "44444444-4444-4444-4444-444444444444",
+    ],
+    calculation: "245000 - 412000 [DocB (22222222) vs DocA (11111111)]",
+  },
+  {
+    metric: "gross_margin_absolute_difference",
+    period: "2025_docB_vs_docA",
+    value: 23.22,
+    unit: "%",
+    document_id: null,
+    source_chunk_ids: [
+      "77777777-7777-7777-7777-777777777777",
+      "44444444-4444-4444-4444-444444444444",
+    ],
+    calculation: "69.45 - 46.23 [DocB (22222222) vs DocA (11111111)]",
+  },
+  // Backend Deterministic Cross-Document Percentage Comparisons
+  {
+    metric: "revenue_comparison",
+    period: "2025_docB_vs_docA",
+    value: -40.53,
+    unit: "%",
+    document_id: null,
+    source_chunk_ids: [
+      "33333333-3333-3333-3333-333333333333",
+      "44444444-4444-4444-4444-444444444444",
+    ],
+    calculation: "((245000 - 412000) / 412000) * 100 [DocB vs DocA]",
+  },
+  {
+    metric: "gross_margin_comparison",
+    period: "2025_docB_vs_docA",
+    value: 50.23,
+    unit: "%",
+    document_id: null,
+    source_chunk_ids: [
+      "77777777-7777-7777-7777-777777777777",
+      "44444444-4444-4444-4444-444444444444",
+    ],
+    calculation: "((69.45 - 46.23) / 46.23) * 100 [DocB vs DocA]",
+  },
+];
+
 export const mockConversationQueryResponse: ConversationQueryResponse = {
   session_id: "44444444-4444-4444-4444-444444444444",
   query: "What was Apple's gross margin in 2025?",
@@ -196,6 +299,37 @@ export const mockConversationQueryResponse: ConversationQueryResponse = {
   ],
   findings: mockFinancialFindings,
   retrieved_chunks: 1,
+  grounded: true,
+};
+
+export const mockComparisonQueryResponse: ConversationQueryResponse = {
+  session_id: "44444444-4444-4444-4444-444444444444",
+  query: "Compare Apple and Microsoft total revenue and gross margin in 2025.",
+  resolved_query: "Compare Apple and Microsoft total revenue and gross margin in 2025",
+  answer:
+    "In fiscal year 2025, Apple reported total revenue of $412.00B [SOURCE 1] compared to Microsoft's $245.00B [SOURCE 2]. Microsoft demonstrated higher gross margins at 69.45% vs Apple's 46.23%.",
+  citations: [
+    {
+      chunk_id: "33333333-3333-3333-3333-333333333333",
+      document_id: "11111111-1111-1111-1111-111111111111",
+      page_number: 28,
+      chunk_type: "text",
+      similarity: 0.94,
+      statement_type: "income_statement",
+      fiscal_periods: ["2025"],
+    },
+    {
+      chunk_id: "44444444-4444-4444-4444-444444444444",
+      document_id: "22222222-2222-2222-2222-222222222222",
+      page_number: 35,
+      chunk_type: "text",
+      similarity: 0.91,
+      statement_type: "income_statement",
+      fiscal_periods: ["2025"],
+    },
+  ],
+  findings: mockComparisonFindings,
+  retrieved_chunks: 2,
   grounded: true,
 };
 

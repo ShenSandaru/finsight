@@ -54,7 +54,6 @@ const navItems: NavItem[] = [
     title: "Compare",
     href: "/compare",
     icon: GitCompare,
-    badge: "Soon",
     activePattern: (p) => Boolean(p?.startsWith("/compare")),
   },
 ];
