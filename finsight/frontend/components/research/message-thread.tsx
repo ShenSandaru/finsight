@@ -3,12 +3,13 @@
 import React, { useEffect, useRef } from "react";
 import { MessageBubble } from "./message-bubble";
 import { Loader2 } from "lucide-react";
-import type { ConversationMessageResponse, CitationResponse } from "@/types/api";
+import type { ConversationMessageResponse, CitationResponse, FinancialFinding } from "@/types/api";
 
 interface MessageThreadProps {
   messages: ConversationMessageResponse[];
   isQuerying: boolean;
   activeCitations?: CitationResponse[];
+  activeFindings?: FinancialFinding[];
   optimisticUserQuery?: string | null;
 }
 
@@ -16,6 +17,7 @@ export function MessageThread({
   messages,
   isQuerying,
   activeCitations = [],
+  activeFindings = [],
   optimisticUserQuery = null,
 }: MessageThreadProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -33,10 +35,11 @@ export function MessageThread({
       data-testid="message-thread"
     >
       {messages.map((msg, index) => {
-        // Associate citations with assistant messages (e.g. latest response)
+        // Associate citations and findings with assistant messages (e.g. latest response)
         const isLatestAssistant =
           msg.role === "assistant" && index === messages.length - 1;
         const citations = isLatestAssistant ? activeCitations : [];
+        const findings = msg.findings?.length ? msg.findings : isLatestAssistant ? activeFindings : [];
 
         return (
           <MessageBubble
@@ -44,6 +47,7 @@ export function MessageThread({
             role={msg.role}
             content={msg.content}
             citations={citations}
+            findings={findings}
             createdAt={msg.created_at}
           />
         );

@@ -391,3 +391,103 @@ class TestConversationServiceUnit:
             except ValidationError as exc:
                 assert settings.GEMINI_API_KEY not in str(exc)
                 assert "api_key" not in str(exc).lower()
+
+    async def test_31_conversation_query_response_with_findings(self, db_session_factory):
+        from app.agents.state import FinancialFinding
+
+        async with db_session_factory() as session:
+            chunk_id_1 = uuid.uuid4()
+            chunk_id_2 = uuid.uuid4()
+            doc_id = uuid.uuid4()
+
+            mock_findings = [
+                FinancialFinding(
+                    metric="revenue",
+                    period="2025",
+                    value=412000.0,
+                    unit="$",
+                    document_id=doc_id,
+                    source_chunk_ids=[chunk_id_1],
+                    calculation=None,
+                ),
+                FinancialFinding(
+                    metric="gross_margin",
+                    period="2025",
+                    value=46.23,
+                    unit="%",
+                    document_id=doc_id,
+                    source_chunk_ids=[chunk_id_1, chunk_id_2],
+                    calculation="(190500 / 412000) * 100",
+                ),
+                FinancialFinding(
+                    metric="revenue_trend",
+                    period="2023_to_2025",
+                    value=1.0,
+                    unit="trend",
+                    document_id=doc_id,
+                    source_chunk_ids=[chunk_id_1],
+                    calculation="Consistent Increase: [383285 -> 394328 -> 412000]",
+                ),
+            ]
+
+            class MockResearchService:
+                async def execute_research(self, **kwargs):
+                    return {
+                        "final_answer": "In 2025, Apple reported revenue of $412B and gross margin of 46.23% [SOURCE 1].",
+                        "citations": [
+                            SourceCitation(
+                                chunk_id=chunk_id_1,
+                                document_id=doc_id,
+                                page_number=28,
+                                chunk_type="table",
+                                similarity=0.95,
+                                statement_type="income_statement",
+                                fiscal_periods=["2025"],
+                            )
+                        ],
+                        "findings": mock_findings,
+                        "grounded": True,
+                        "retrieved_chunks": [1],
+                    }
+
+            service = ConversationService(research_service=MockResearchService())
+            sess = await service.create_session(title="Findings Test", db=session)
+
+            resp = await service.process_query(
+                session_id=sess.id,
+                query="What was revenue and margin?",
+                db=session,
+            )
+
+            assert len(resp.findings) == 3
+            assert resp.findings[0].metric == "revenue"
+            assert resp.findings[0].value == 412000.0
+            assert resp.findings[0].unit == "$"
+            assert resp.findings[0].source_chunk_ids == [chunk_id_1]
+            assert resp.findings[0].document_id == doc_id
+
+            assert resp.findings[1].metric == "gross_margin"
+            assert resp.findings[1].value == 46.23
+            assert resp.findings[1].unit == "%"
+            assert resp.findings[1].calculation == "(190500 / 412000) * 100"
+            assert resp.findings[1].source_chunk_ids == [chunk_id_1, chunk_id_2]
+
+            assert resp.findings[2].metric == "revenue_trend"
+            assert resp.findings[2].value == 1.0
+            assert resp.findings[2].unit == "trend"
+            assert "Consistent Increase" in resp.findings[2].calculation
+
+    async def test_32_conversation_query_response_empty_findings(self, db_session_factory):
+        async with db_session_factory() as session:
+            mock_rag = MockRAGService()
+            service = ConversationService(rag_service=mock_rag)
+            sess = await service.create_session(title="Empty Findings Test", db=session)
+
+            resp = await service.process_query(
+                session_id=sess.id,
+                query="Hello, what is this?",
+                db=session,
+            )
+
+            assert isinstance(resp.findings, list)
+            assert len(resp.findings) == 0

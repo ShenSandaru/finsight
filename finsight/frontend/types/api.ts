@@ -161,6 +161,7 @@ export interface ConversationMessageResponse {
   session_id: string; // UUID
   role: "user" | "assistant" | string;
   content: string;
+  findings?: FinancialFinding[];
   created_at: string; // ISO 8601
 }
 
@@ -178,6 +179,7 @@ export interface ConversationQueryResponse {
   resolved_query: string | null;
   answer: string;
   citations: CitationResponse[];
+  findings?: FinancialFinding[];
   retrieved_chunks: number;
   grounded: boolean;
 }

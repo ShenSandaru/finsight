@@ -21,7 +21,12 @@ import {
 } from "@/hooks/use-conversations";
 import { useUiStore } from "@/stores/ui-store";
 import { CitationDrawer } from "@/components/citations/citation-drawer";
-import type { ConversationSessionResponse, CitationResponse, ConversationMessageResponse } from "@/types/api";
+import type {
+  ConversationSessionResponse,
+  CitationResponse,
+  ConversationMessageResponse,
+  FinancialFinding,
+} from "@/types/api";
 
 export default function ResearchPage() {
   const queryClient = useQueryClient();
@@ -30,6 +35,7 @@ export default function ResearchPage() {
   const [queryInput, setQueryInput] = useState("");
   const [optimisticUserQuery, setOptimisticUserQuery] = useState<string | null>(null);
   const [activeCitations, setActiveCitations] = useState<CitationResponse[]>([]);
+  const [activeFindings, setActiveFindings] = useState<FinancialFinding[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const selectedDocumentIds = useUiStore((state) => state.selectedDocumentIds);
@@ -84,6 +90,7 @@ export default function ResearchPage() {
           setSessions((prev) => [newSession, ...prev]);
           setActiveSessionId(newSession.id);
           setActiveCitations([]);
+          setActiveFindings([]);
         },
         onError: (err) => {
           setErrorMessage(err.message || "Failed to initialize research session.");
@@ -147,6 +154,7 @@ export default function ResearchPage() {
         onSuccess: (res) => {
           setOptimisticUserQuery(null);
           setActiveCitations(res.citations || []);
+          setActiveFindings(res.findings || []);
 
           // Immediately append user and assistant messages into cache
           queryClient.setQueryData<ConversationMessageResponse[]>(
@@ -165,6 +173,7 @@ export default function ResearchPage() {
                 session_id: sessionId,
                 role: "assistant",
                 content: res.answer,
+                findings: res.findings || [],
                 created_at: new Date().toISOString(),
               },
             ]
@@ -264,6 +273,7 @@ export default function ResearchPage() {
               messages={messages}
               isQuerying={isQuerying}
               activeCitations={activeCitations}
+              activeFindings={activeFindings}
               optimisticUserQuery={optimisticUserQuery}
             />
           )}

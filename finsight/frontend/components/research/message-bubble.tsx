@@ -3,12 +3,14 @@
 import React from "react";
 import { CitationPill } from "./citation-pill";
 import { User, Bot } from "lucide-react";
-import type { CitationResponse } from "@/types/api";
+import type { CitationResponse, FinancialFinding } from "@/types/api";
+import { FindingList } from "@/components/finance/finding-list";
 
 interface MessageBubbleProps {
   role: "user" | "assistant" | string;
   content: string;
   citations?: CitationResponse[];
+  findings?: FinancialFinding[];
   createdAt?: string;
 }
 
@@ -16,6 +18,7 @@ export function MessageBubble({
   role,
   content,
   citations = [],
+  findings = [],
   createdAt,
 }: MessageBubbleProps) {
   const isUser = role === "user";
@@ -79,10 +82,13 @@ export function MessageBubble({
           className={`rounded-lg px-4 py-2.5 shadow-sm leading-relaxed whitespace-pre-wrap font-sans ${
             isUser
               ? "bg-primary text-primary-foreground font-medium"
-              : "bg-card border text-card-foreground"
+              : "bg-card border text-card-foreground w-full"
           }`}
         >
           {isUser ? content : renderContentWithCitations(content)}
+          {!isUser && findings.length > 0 && (
+            <FindingList findings={findings} />
+          )}
         </div>
 
         {createdAt && (

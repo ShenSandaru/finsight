@@ -11,6 +11,7 @@ import type {
   ReportListResponse,
   HealthResponse,
   DocumentChunkResponse,
+  FinancialFinding,
 } from "@/types/api";
 
 export const mockHealthResponse: HealthResponse = {
@@ -121,6 +122,62 @@ export const mockMessages: ConversationMessageResponse[] = [
   },
 ];
 
+export const mockFinancialFindings: FinancialFinding[] = [
+  {
+    metric: "revenue",
+    period: "2025",
+    value: 412000,
+    unit: "$",
+    document_id: "11111111-1111-1111-1111-111111111111",
+    source_chunk_ids: ["33333333-3333-3333-3333-333333333333"],
+  },
+  {
+    metric: "revenue_growth",
+    period: "2025_vs_2024",
+    value: 7.49,
+    unit: "%",
+    document_id: "11111111-1111-1111-1111-111111111111",
+    source_chunk_ids: ["33333333-3333-3333-3333-333333333333"],
+    calculation: "((412000 - 383285) / 383285) * 100",
+  },
+  {
+    metric: "gross_margin",
+    period: "2025",
+    value: 46.23,
+    unit: "%",
+    document_id: "11111111-1111-1111-1111-111111111111",
+    source_chunk_ids: ["77777777-7777-7777-7777-777777777777"],
+    calculation: "(190500 / 412000) * 100",
+  },
+  {
+    metric: "operating_margin",
+    period: "2025",
+    value: 30.74,
+    unit: "%",
+    document_id: "11111111-1111-1111-1111-111111111111",
+    source_chunk_ids: ["77777777-7777-7777-7777-777777777777"],
+    calculation: "(126600 / 412000) * 100",
+  },
+  {
+    metric: "revenue_cagr",
+    period: "2023_to_2025",
+    value: 3.75,
+    unit: "%",
+    document_id: "11111111-1111-1111-1111-111111111111",
+    source_chunk_ids: ["33333333-3333-3333-3333-333333333333"],
+    calculation: "((412000 / 383285) ^ (1 / 2) - 1) * 100",
+  },
+  {
+    metric: "revenue_trend",
+    period: "2023_to_2025",
+    value: 1.0,
+    unit: "trend",
+    document_id: "11111111-1111-1111-1111-111111111111",
+    source_chunk_ids: ["33333333-3333-3333-3333-333333333333"],
+    calculation: "Consistent Increase: [383285 -> 394328 -> 412000]",
+  },
+];
+
 export const mockConversationQueryResponse: ConversationQueryResponse = {
   session_id: "44444444-4444-4444-4444-444444444444",
   query: "What was Apple's gross margin in 2025?",
@@ -137,6 +194,7 @@ export const mockConversationQueryResponse: ConversationQueryResponse = {
       fiscal_periods: ["2025"],
     },
   ],
+  findings: mockFinancialFindings,
   retrieved_chunks: 1,
   grounded: true,
 };
