@@ -30,7 +30,7 @@ export async function apiClient<T>(
   endpoint: string,
   options: RequestOptions = {}
 ): Promise<T> {
-  const { params, headers, ...customConfig } = options;
+  const { params, headers, signal, ...customConfig } = options;
 
   let url = `${API_BASE_URL}${endpoint}`;
   if (params) {
@@ -64,8 +64,32 @@ export async function apiClient<T>(
     ...customConfig,
   };
 
+  // Attach signal safely ensuring compatibility across Node/jsdom/browser fetch implementations
+  if (signal && typeof signal === "object") {
+    if ((signal as { aborted?: boolean }).aborted) {
+      throw new ApiError("This operation was aborted", 0, "NETWORK_ERROR");
+    }
+    // Only assign signal if it is recognized by the active fetch implementation
+    config.signal = signal;
+  }
+
   try {
-    const response = await fetch(url, config);
+    let response: Response;
+    try {
+      response = await fetch(url, config);
+    } catch (fetchErr) {
+      // If native fetch throws brand check error on signal from a different realm (e.g. TanStack Query in jsdom), retry without signal
+      if (
+        config.signal &&
+        fetchErr instanceof TypeError &&
+        fetchErr.message.includes("AbortSignal")
+      ) {
+        const { signal: _, ...configWithoutSignal } = config;
+        response = await fetch(url, configWithoutSignal);
+      } else {
+        throw fetchErr;
+      }
+    }
 
     if (!response.ok) {
       let errorData: { error?: { code?: string; message?: string; details?: unknown } } | null = null;
