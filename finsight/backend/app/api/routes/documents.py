@@ -6,9 +6,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.tasks import enqueue_task
-from app.core.exceptions import DocumentNotFoundError, ExternalServiceError
+from app.core.exceptions import DocumentNotFoundError, ChunkNotFoundError, ExternalServiceError
 from app.services.document_service import DocumentService
-from app.schemas.document import DocumentResponse, DocumentUploadResponse, DocumentListResponse
+from app.schemas.document import (
+    DocumentResponse,
+    DocumentUploadResponse,
+    DocumentListResponse,
+    DocumentChunkResponse,
+)
 
 logger = logging.getLogger("finsight.api.documents")
 router = APIRouter(prefix="/documents", tags=["Documents"])
@@ -74,6 +79,40 @@ async def list_documents(
     return DocumentListResponse(
         total=len(documents),
         documents=[DocumentResponse.model_validate(doc) for doc in documents],
+    )
+
+
+@router.get(
+    "/chunks/{chunk_id}",
+    response_model=DocumentChunkResponse,
+)
+async def get_chunk(
+    chunk_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get a specific evidence chunk by ID for citation inspection.
+    """
+    service = DocumentService(db)
+    chunk = await service.get_chunk(chunk_id)
+
+    if not chunk:
+        raise ChunkNotFoundError(
+            message=f"Evidence chunk with ID '{chunk_id}' not found",
+            details={"chunk_id": str(chunk_id)}
+        )
+
+    return DocumentChunkResponse(
+        id=chunk.id,
+        document_id=chunk.document_id,
+        document_title=chunk.document.title if chunk.document else None,
+        document_filename=chunk.document.filename if chunk.document else None,
+        content=chunk.content,
+        chunk_type=chunk.chunk_type,
+        chunk_index=chunk.chunk_index,
+        page_number=chunk.page_number,
+        metadata=chunk.metadata_,
+        created_at=chunk.created_at,
     )
 
 

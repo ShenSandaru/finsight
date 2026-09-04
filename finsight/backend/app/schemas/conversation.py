@@ -39,6 +39,20 @@ class ConversationQueryRequest(BaseModel):
     document_ids: list[UUID] | None = Field(None, description="Optional list of document UUIDs for multi-document filtering")
 
 
+class FinancialFindingResponse(BaseModel):
+    """Structured financial metric, calculated ratio, or trend finding produced by Financial Analyzer."""
+    metric: str = Field(..., description="Canonical metric or ratio name (e.g. 'revenue', 'gross_margin', 'revenue_growth', 'revenue_trend')")
+    period: str = Field(..., description="Fiscal period or comparison span (e.g. '2025', '2025_vs_2024', '2023_to_2025')")
+    value: float = Field(..., description="Numerical figure extracted or computed")
+    unit: str = Field("$", description="Unit or currency ('$', '%', 'ratio', 'shares', 'trend')")
+    document_id: UUID | None = Field(None, description="Document UUID owning this finding")
+    source_chunk_ids: list[UUID] = Field(default_factory=list, description="Chunk UUIDs backing this numerical finding")
+    calculation: str | None = Field(None, description="Deterministic formula or trend calculation detail")
+
+    class Config:
+        from_attributes = True
+
+
 class ConversationQueryResponse(BaseModel):
     """Response payload for multi-turn grounded question answering."""
     session_id: UUID = Field(..., description="Session UUID for this conversation")
@@ -46,5 +60,6 @@ class ConversationQueryResponse(BaseModel):
     resolved_query: str | None = Field(None, description="Conversation-aware retrieval query if rewritten for context")
     answer: str = Field(..., description="Grounded financial answer referencing [SOURCE N] citations")
     citations: list[CitationResponse] = Field(default_factory=list, description="Ordered source citations backing answer")
+    findings: list[FinancialFindingResponse] = Field(default_factory=list, description="Structured audited financial findings")
     retrieved_chunks: int = Field(..., description="Total retrieved chunks included in evidence context")
     grounded: bool = Field(..., description="True if answer is backed by retrieved evidence; False if insufficient")
