@@ -15,6 +15,9 @@ import {
   mockTextChunk,
   mockTableChunk,
 } from "./data";
+import { ConversationMessageResponse } from "@/types/api";
+
+export const sessionMessagesStore: Record<string, ConversationMessageResponse[]> = {};
 
 export const handlers = [
   // Health
@@ -118,29 +121,61 @@ export const handlers = [
   }),
 
   http.get("*/api/v1/conversations/:id/messages", ({ params }) => {
-    if (params.id === mockSession.id) {
+    const id = String(params.id);
+    if (sessionMessagesStore[id]) {
+      return HttpResponse.json(sessionMessagesStore[id]);
+    }
+    if (id === mockSession.id) {
       return HttpResponse.json(mockMessages);
     }
     return HttpResponse.json([]);
   }),
 
   http.post("*/api/v1/conversations/:id/query", async ({ request, params }) => {
+    const id = String(params.id);
     let body: any = {};
     try {
       body = await request.json();
     } catch {
       // empty
     }
-    if (body?.document_ids && Array.isArray(body.document_ids) && body.document_ids.length >= 2) {
-      return HttpResponse.json({
-        ...mockComparisonQueryResponse,
-        session_id: String(params.id),
-      });
+    const isComparison =
+      body?.document_ids &&
+      Array.isArray(body.document_ids) &&
+      body.document_ids.length >= 2;
+
+    const response = isComparison
+      ? {
+          ...mockComparisonQueryResponse,
+          session_id: id,
+        }
+      : {
+          ...mockConversationQueryResponse,
+          session_id: id,
+        };
+
+    if (!sessionMessagesStore[id]) {
+      sessionMessagesStore[id] = [];
     }
-    return HttpResponse.json({
-      ...mockConversationQueryResponse,
-      session_id: String(params.id),
-    });
+    sessionMessagesStore[id].push(
+      {
+        id: "user-" + Date.now(),
+        session_id: id,
+        role: "user",
+        content: body?.query || "Query",
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: "assistant-" + Date.now(),
+        session_id: id,
+        role: "assistant",
+        content: response.answer,
+        created_at: new Date().toISOString(),
+        findings: response.findings,
+      }
+    );
+
+    return HttpResponse.json(response);
   }),
 
   // Reports

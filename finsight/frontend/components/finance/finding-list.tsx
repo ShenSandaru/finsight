@@ -104,9 +104,9 @@ export function FindingList({ findings = [], className }: FindingListProps) {
       {hasMetrics && (
         <div className="space-y-2">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-            {baseMetrics.map((finding) => (
+            {baseMetrics.map((finding, idx) => (
               <MetricCard
-                key={`metric-${finding.metric}-${finding.period}`}
+                key={`metric-${finding.metric}-${finding.period}-${finding.document_id || idx}`}
                 finding={finding}
                 growthFinding={growthMap[finding.metric]}
                 cagrFinding={cagrMap[finding.metric]}
