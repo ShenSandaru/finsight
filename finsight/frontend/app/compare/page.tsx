@@ -62,6 +62,13 @@ export default function ComparePage() {
   const [isQuerying, setIsQuerying] = useState(false);
   const meetsMinimum = selectedDocumentIds.length >= 2;
 
+  // Clear previous comparison response if selected documents drop below minimum
+  React.useEffect(() => {
+    if (!meetsMinimum && comparisonResponse) {
+      setComparisonResponse(null);
+    }
+  }, [meetsMinimum, comparisonResponse]);
+
   const handleRunComparison = async (customQuery?: string) => {
     if (!meetsMinimum) return;
 

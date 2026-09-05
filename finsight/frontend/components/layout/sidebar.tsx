@@ -149,7 +149,7 @@ export function Sidebar() {
       </nav>
 
       {/* Scoped Research Documents Status in Sidebar Footer */}
-      {sidebarOpen && (
+      {sidebarOpen ? (
         <div className="border-t p-3 bg-muted/20">
           <div className="flex items-center justify-between text-xs mb-1">
             <span className="text-muted-foreground flex items-center gap-1.5">
@@ -169,6 +169,21 @@ export function Sidebar() {
               ? `${selectedDocumentIds.length} filing${selectedDocumentIds.length > 1 ? "s" : ""} scoped for research queries`
               : "No filings selected. Select in Documents."}
           </p>
+        </div>
+      ) : (
+        <div className="border-t p-2 flex justify-center bg-muted/10">
+          <Link
+            href="/documents"
+            className="flex flex-col items-center justify-center p-1 rounded hover:bg-muted/50 transition-colors"
+            title={`${selectedDocumentIds.length} filings in active context`}
+            aria-label={`${selectedDocumentIds.length} filings in active context`}
+            data-testid="sidebar-collapsed-context-badge"
+          >
+            <Layers className="h-4 w-4 text-primary" />
+            <span className="text-[9px] font-mono font-bold text-foreground mt-0.5 font-tabular-nums">
+              {selectedDocumentIds.length}
+            </span>
+          </Link>
         </div>
       )}
     </aside>

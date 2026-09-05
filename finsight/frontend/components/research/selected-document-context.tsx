@@ -16,9 +16,20 @@ export function SelectedDocumentContext({ className }: SelectedDocumentContextPr
   const selectedDocumentIds = useUiStore((state) => state.selectedDocumentIds);
   const toggleDocumentSelection = useUiStore((state) => state.toggleDocumentSelection);
   const clearDocumentSelection = useUiStore((state) => state.clearDocumentSelection);
+  const pruneDeletedDocuments = useUiStore((state) => state.pruneDeletedDocuments);
 
   const { data: documentData } = useDocuments();
   const allDocs = documentData?.documents || [];
+
+  // Prune any selected documents that were deleted from the repository
+  React.useEffect(() => {
+    if (documentData?.documents && documentData.documents.length > 0) {
+      const validIndexedIds = documentData.documents
+        .filter((d) => d.status === "indexed")
+        .map((d) => d.id);
+      pruneDeletedDocuments(validIndexedIds);
+    }
+  }, [documentData, pruneDeletedDocuments]);
 
   const selectedDocs = allDocs.filter((d) => selectedDocumentIds.includes(d.id));
 
