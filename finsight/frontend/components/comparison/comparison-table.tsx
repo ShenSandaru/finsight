@@ -184,8 +184,8 @@ export function ComparisonTable({
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40 border-b">
-              {/* Sticky Metric column */}
-              <TableHead className="min-w-[180px] py-3 px-4 font-semibold text-foreground sticky left-0 bg-muted/40 z-10">
+              {/* Sticky Metric column on sm+ screens */}
+              <TableHead className="min-w-[170px] py-3 px-4 font-semibold text-foreground sm:sticky sm:left-0 bg-muted/40 sm:z-10">
                 Financial Metric
               </TableHead>
               <TableHead className="w-[100px] py-3 px-3 font-semibold text-foreground font-mono text-center">
@@ -247,7 +247,7 @@ export function ComparisonTable({
                   data-testid={`comparison-row-${row.baseMetric}`}
                 >
                   {/* Metric Name */}
-                  <TableCell className="py-2.5 px-4 font-medium text-foreground sticky left-0 bg-card z-10 border-r sm:border-r-0">
+                  <TableCell className="py-2.5 px-4 font-medium text-foreground sm:sticky sm:left-0 bg-card sm:z-10 border-r sm:border-r-0">
                     <div className="flex flex-col">
                       <span className="text-xs">{formatMetricName(row.baseMetric)}</span>
                       <span className="font-mono text-[10px] text-muted-foreground">

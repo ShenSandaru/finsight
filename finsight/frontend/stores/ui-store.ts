@@ -20,6 +20,7 @@ interface UiState {
   setSelectedDocumentIds: (ids: string[]) => void;
   toggleDocumentSelection: (id: string) => void;
   clearDocumentSelection: () => void;
+  pruneDeletedDocuments: (validIds: string[]) => void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -56,4 +57,13 @@ export const useUiStore = create<UiState>((set) => ({
       };
     }),
   clearDocumentSelection: () => set({ selectedDocumentIds: [] }),
+  pruneDeletedDocuments: (validIds) =>
+    set((state) => {
+      const validSet = new Set(validIds);
+      const filtered = state.selectedDocumentIds.filter((id) => validSet.has(id));
+      if (filtered.length === state.selectedDocumentIds.length) {
+        return state;
+      }
+      return { selectedDocumentIds: filtered };
+    }),
 }));

@@ -38,10 +38,21 @@ export function ComparisonSelector({
   const toggleDocumentSelection = useUiStore((state) => state.toggleDocumentSelection);
   const clearDocumentSelection = useUiStore((state) => state.clearDocumentSelection);
   const setSelectedDocumentIds = useUiStore((state) => state.setSelectedDocumentIds);
+  const pruneDeletedDocuments = useUiStore((state) => state.pruneDeletedDocuments);
 
   const { data: documentsData, isLoading, isError, error } = useDocuments();
   const allDocs = documentsData?.documents || [];
   const indexedDocs = allDocs.filter((d) => d.status === "indexed");
+
+  // Reconcile selected documents when repository changes
+  React.useEffect(() => {
+    if (documentsData?.documents && documentsData.documents.length > 0) {
+      const validIndexedIds = documentsData.documents
+        .filter((d) => d.status === "indexed")
+        .map((d) => d.id);
+      pruneDeletedDocuments(validIndexedIds);
+    }
+  }, [documentsData, pruneDeletedDocuments]);
 
   const selectedDocs = indexedDocs.filter((d) =>
     selectedDocumentIds.includes(d.id)

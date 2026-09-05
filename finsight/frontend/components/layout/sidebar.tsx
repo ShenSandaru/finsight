@@ -12,10 +12,19 @@ import {
   Layers,
   ChevronLeft,
   ChevronRight,
+  PanelLeft,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useUiStore } from "@/stores/ui-store";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { FinSightLogo } from "@/components/layout/finsight-logo";
 
 interface NavItem {
   title: string;
@@ -66,50 +75,83 @@ export function Sidebar() {
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-40 flex flex-col border-r bg-card transition-all duration-200 ${
+      className={`fixed inset-y-0 left-0 z-40 flex flex-col border-r bg-card transition-all duration-200 overflow-x-hidden ${
         sidebarOpen ? "w-64" : "w-16"
       }`}
       data-testid="app-sidebar"
       aria-label="Application navigation"
     >
-      {/* Brand Header */}
-      <div className="flex h-14 items-center justify-between border-b px-3">
-        <Link
-          href="/"
-          className="flex items-center gap-2.5 overflow-hidden transition-opacity hover:opacity-80"
-          aria-label="FinSight home"
-        >
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-primary font-mono text-sm font-bold text-primary-foreground shadow-sm">
-            FS
-          </div>
-          {sidebarOpen && (
+      {/* Brand Header / ChatGPT-style Toggle */}
+      {sidebarOpen ? (
+        <div className="flex h-14 items-center justify-between border-b px-3">
+          <Link
+            href="/"
+            className="flex items-center gap-2.5 overflow-hidden transition-opacity hover:opacity-85"
+            aria-label="FinSight home"
+          >
+            <FinSightLogo size={32} className="shadow-sm" />
             <div className="flex flex-col min-w-0">
-              <span className="font-semibold tracking-tight text-sm text-foreground leading-none">
-                FinSight
-              </span>
-              <span className="text-[10px] text-muted-foreground font-mono mt-0.5">
+              <div className="flex items-center gap-1.5">
+                <span className="font-semibold tracking-tight text-sm text-foreground leading-none">
+                  FinSight
+                </span>
+                <span className="rounded bg-finance-positive/10 dark:bg-finance-positive/20 text-finance-positive dark:text-finance-positive-foreground border border-finance-positive/25 px-1 py-0.2 text-[9px] font-mono font-medium leading-none uppercase tracking-wider">
+                  Beta
+                </span>
+              </div>
+              <span className="text-[10px] text-muted-foreground font-mono mt-0.5 tracking-wider">
                 INVESTMENT COPILOT
               </span>
             </div>
-          )}
-        </Link>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-muted-foreground hover:text-foreground hidden sm:inline-flex"
-          onClick={toggleSidebar}
-          aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
-        >
-          {sidebarOpen ? (
-            <ChevronLeft className="h-4 w-4" />
-          ) : (
-            <ChevronRight className="h-4 w-4" />
-          )}
-        </Button>
-      </div>
+          </Link>
+          <TooltipProvider delayDuration={150}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground hidden sm:inline-flex shrink-0"
+                  onClick={toggleSidebar}
+                  aria-label="Collapse sidebar"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">Close sidebar</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+      ) : (
+        <div className="flex h-14 items-center justify-center border-b">
+          <TooltipProvider delayDuration={150}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={toggleSidebar}
+                  className="group relative flex h-9 w-9 items-center justify-center rounded-lg hover:bg-muted transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  aria-label="Expand sidebar"
+                >
+                  {/* Default State: Designed Logo */}
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center transition-opacity duration-150 group-hover:opacity-0">
+                    <FinSightLogo size={30} className="shadow-sm" />
+                  </div>
+                  {/* Hover State: Sidebar Expand Icon */}
+                  <div className="absolute inset-0 flex items-center justify-center text-foreground opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                    <PanelLeft className="h-5 w-5" />
+                  </div>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right" sideOffset={10} className="font-medium text-xs">
+                Open sidebar
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+      )}
 
       {/* Nav List */}
-      <nav className="flex-1 space-y-1 p-2 overflow-y-auto">
+      <nav className="flex-1 space-y-1 p-2 overflow-y-auto overflow-x-hidden">
         {navItems.map((item) => {
           const isActive = item.activePattern(pathname);
           const Icon = item.icon;
@@ -118,7 +160,9 @@ export function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-3 rounded-md px-3 py-2 text-xs font-medium transition-colors ${
+              className={`flex items-center rounded-md text-xs font-medium transition-colors ${
+                sidebarOpen ? "gap-3 px-3 py-2" : "justify-center p-2"
+              } ${
                 isActive
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -148,27 +192,46 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Scoped Research Documents Status in Sidebar Footer */}
-      {sidebarOpen && (
-        <div className="border-t p-3 bg-muted/20">
-          <div className="flex items-center justify-between text-xs mb-1">
-            <span className="text-muted-foreground flex items-center gap-1.5">
-              <Layers className="h-3.5 w-3.5 text-primary" />
-              Active Context
-            </span>
-            <Badge
-              variant={selectedDocumentIds.length > 0 ? "financePositive" : "secondary"}
-              className="text-[10px] px-1.5 py-0 h-4 font-tabular-nums"
-              data-testid="sidebar-selected-count"
-            >
-              {selectedDocumentIds.length} {selectedDocumentIds.length === 1 ? "doc" : "docs"}
-            </Badge>
+      {/* Scoped Research Documents Status & Theme Toggle in Sidebar Footer */}
+      {sidebarOpen ? (
+        <div className="border-t p-3 bg-muted/20 space-y-3">
+          <ThemeToggle collapsed={false} />
+          <div>
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="text-muted-foreground flex items-center gap-1.5">
+                <Layers className="h-3.5 w-3.5 text-primary" />
+                Active Context
+              </span>
+              <Badge
+                variant={selectedDocumentIds.length > 0 ? "financePositive" : "secondary"}
+                className="text-[10px] px-1.5 py-0 h-4 font-tabular-nums"
+                data-testid="sidebar-selected-count"
+              >
+                {selectedDocumentIds.length} {selectedDocumentIds.length === 1 ? "doc" : "docs"}
+              </Badge>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-snug">
+              {selectedDocumentIds.length > 0
+                ? `${selectedDocumentIds.length} filing${selectedDocumentIds.length > 1 ? "s" : ""} scoped for research queries`
+                : "No filings selected. Select in Documents."}
+            </p>
           </div>
-          <p className="text-[11px] text-muted-foreground leading-snug">
-            {selectedDocumentIds.length > 0
-              ? `${selectedDocumentIds.length} filing${selectedDocumentIds.length > 1 ? "s" : ""} scoped for research queries`
-              : "No filings selected. Select in Documents."}
-          </p>
+        </div>
+      ) : (
+        <div className="border-t p-2 flex flex-col items-center gap-1 bg-muted/10">
+          <ThemeToggle collapsed={true} />
+          <Link
+            href="/documents"
+            className="flex flex-col items-center justify-center p-1.5 rounded hover:bg-muted/50 transition-colors w-full"
+            title={`${selectedDocumentIds.length} filings in active context`}
+            aria-label={`${selectedDocumentIds.length} filings in active context`}
+            data-testid="sidebar-collapsed-context-badge"
+          >
+            <Layers className="h-4 w-4 text-primary shrink-0" />
+            <span className="text-[10px] font-mono font-bold text-foreground mt-0.5 font-tabular-nums">
+              {selectedDocumentIds.length}
+            </span>
+          </Link>
         </div>
       )}
     </aside>
