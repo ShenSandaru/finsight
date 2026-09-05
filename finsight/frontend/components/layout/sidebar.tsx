@@ -23,6 +23,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useUiStore } from "@/stores/ui-store";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { FinSightLogo } from "@/components/layout/finsight-logo";
 
 interface NavItem {
   title: string;
@@ -84,17 +86,20 @@ export function Sidebar() {
         <div className="flex h-14 items-center justify-between border-b px-3">
           <Link
             href="/"
-            className="flex items-center gap-2.5 overflow-hidden transition-opacity hover:opacity-80"
+            className="flex items-center gap-2.5 overflow-hidden transition-opacity hover:opacity-85"
             aria-label="FinSight home"
           >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-primary font-mono text-sm font-bold text-primary-foreground shadow-sm">
-              FS
-            </div>
+            <FinSightLogo size={32} className="shadow-sm" />
             <div className="flex flex-col min-w-0">
-              <span className="font-semibold tracking-tight text-sm text-foreground leading-none">
-                FinSight
-              </span>
-              <span className="text-[10px] text-muted-foreground font-mono mt-0.5">
+              <div className="flex items-center gap-1.5">
+                <span className="font-semibold tracking-tight text-sm text-foreground leading-none">
+                  FinSight
+                </span>
+                <span className="rounded bg-finance-positive/10 dark:bg-finance-positive/20 text-finance-positive dark:text-finance-positive-foreground border border-finance-positive/25 px-1 py-0.2 text-[9px] font-mono font-medium leading-none uppercase tracking-wider">
+                  Beta
+                </span>
+              </div>
+              <span className="text-[10px] text-muted-foreground font-mono mt-0.5 tracking-wider">
                 INVESTMENT COPILOT
               </span>
             </div>
@@ -127,9 +132,9 @@ export function Sidebar() {
                   className="group relative flex h-9 w-9 items-center justify-center rounded-lg hover:bg-muted transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   aria-label="Expand sidebar"
                 >
-                  {/* Default State: Logo Icon */}
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-primary font-mono text-xs font-bold text-primary-foreground shadow-sm transition-opacity duration-150 group-hover:opacity-0">
-                    FS
+                  {/* Default State: Designed Logo */}
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center transition-opacity duration-150 group-hover:opacity-0">
+                    <FinSightLogo size={30} className="shadow-sm" />
                   </div>
                   {/* Hover State: Sidebar Expand Icon */}
                   <div className="absolute inset-0 flex items-center justify-center text-foreground opacity-0 transition-opacity duration-150 group-hover:opacity-100">
@@ -187,30 +192,34 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Scoped Research Documents Status in Sidebar Footer */}
+      {/* Scoped Research Documents Status & Theme Toggle in Sidebar Footer */}
       {sidebarOpen ? (
-        <div className="border-t p-3 bg-muted/20">
-          <div className="flex items-center justify-between text-xs mb-1">
-            <span className="text-muted-foreground flex items-center gap-1.5">
-              <Layers className="h-3.5 w-3.5 text-primary" />
-              Active Context
-            </span>
-            <Badge
-              variant={selectedDocumentIds.length > 0 ? "financePositive" : "secondary"}
-              className="text-[10px] px-1.5 py-0 h-4 font-tabular-nums"
-              data-testid="sidebar-selected-count"
-            >
-              {selectedDocumentIds.length} {selectedDocumentIds.length === 1 ? "doc" : "docs"}
-            </Badge>
+        <div className="border-t p-3 bg-muted/20 space-y-3">
+          <ThemeToggle collapsed={false} />
+          <div>
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="text-muted-foreground flex items-center gap-1.5">
+                <Layers className="h-3.5 w-3.5 text-primary" />
+                Active Context
+              </span>
+              <Badge
+                variant={selectedDocumentIds.length > 0 ? "financePositive" : "secondary"}
+                className="text-[10px] px-1.5 py-0 h-4 font-tabular-nums"
+                data-testid="sidebar-selected-count"
+              >
+                {selectedDocumentIds.length} {selectedDocumentIds.length === 1 ? "doc" : "docs"}
+              </Badge>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-snug">
+              {selectedDocumentIds.length > 0
+                ? `${selectedDocumentIds.length} filing${selectedDocumentIds.length > 1 ? "s" : ""} scoped for research queries`
+                : "No filings selected. Select in Documents."}
+            </p>
           </div>
-          <p className="text-[11px] text-muted-foreground leading-snug">
-            {selectedDocumentIds.length > 0
-              ? `${selectedDocumentIds.length} filing${selectedDocumentIds.length > 1 ? "s" : ""} scoped for research queries`
-              : "No filings selected. Select in Documents."}
-          </p>
         </div>
       ) : (
-        <div className="border-t p-2 flex justify-center bg-muted/10">
+        <div className="border-t p-2 flex flex-col items-center gap-1 bg-muted/10">
+          <ThemeToggle collapsed={true} />
           <Link
             href="/documents"
             className="flex flex-col items-center justify-center p-1.5 rounded hover:bg-muted/50 transition-colors w-full"

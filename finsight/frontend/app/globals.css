@@ -55,50 +55,51 @@
   }
 
   .dark {
-    --background: 222 47% 10%;
-    --foreground: 210 40% 98%;
+    /* Sophisticated Institutional Matte Dark Theme (Neutral Charcoal / Zinc) */
+    --background: 240 10% 4%;       /* Deep matte charcoal base #0a0a0c */
+    --foreground: 0 0% 95%;         /* Soft matte off-white #f2f2f2 */
 
-    --card: 222 47% 13%;
-    --card-foreground: 210 40% 98%;
+    --card: 240 6% 9%;              /* Elevated matte card #161619 */
+    --card-foreground: 0 0% 95%;
 
-    --popover: 222 47% 13%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 240 6% 9%;           /* Popovers & menus #161619 */
+    --popover-foreground: 0 0% 95%;
 
-    --primary: 217 91% 60%;
-    --primary-foreground: 222 47% 10%;
+    --primary: 217 91% 60%;          /* Luminous cobalt blue for accents */
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 217 33% 20%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 240 5% 15%;        /* Subtle matte secondary button #252528 */
+    --secondary-foreground: 0 0% 98%;
 
-    --muted: 217 33% 18%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 240 5% 14%;            /* Matte muted container #232326 */
+    --muted-foreground: 240 5% 65%; /* Matte secondary text #a3a3a8 */
 
-    --accent: 217 33% 22%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 240 5% 16%;           /* Subtle hover accent #28282c */
+    --accent-foreground: 0 0% 98%;
 
     --destructive: 0 63% 45%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 217 33% 22%;
-    --input: 217 33% 22%;
+    --border: 240 5% 18%;           /* Clean matte hairline border #2c2c31 */
+    --input: 240 5% 18%;
     --ring: 217 91% 60%;
 
-    /* Financial Domain Semantic Tokens (Dark Theme) */
+    /* Financial Domain Semantic Tokens (Matte Dark Theme) */
     --finance-positive: 142 70% 45%;
-    --finance-positive-foreground: 142 70% 90%;
-    --finance-positive-muted: 144 61% 16%;
+    --finance-positive-foreground: 142 70% 92%;
+    --finance-positive-muted: 144 50% 13%;
 
     --finance-negative: 0 75% 60%;
     --finance-negative-foreground: 0 75% 95%;
-    --finance-negative-muted: 0 63% 18%;
+    --finance-negative-muted: 0 50% 15%;
 
     --finance-warning: 38 92% 60%;
     --finance-warning-foreground: 38 92% 95%;
-    --finance-warning-muted: 32 81% 18%;
+    --finance-warning-muted: 32 60% 14%;
 
-    --finance-neutral: 215 20% 65%;
-    --finance-neutral-foreground: 210 40% 98%;
-    --finance-neutral-muted: 217 33% 18%;
+    --finance-neutral: 240 5% 65%;
+    --finance-neutral-foreground: 0 0% 98%;
+    --finance-neutral-muted: 240 5% 14%;
   }
 }
 
@@ -109,6 +110,22 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
+    transition: background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Smooth color theme transitions on theme swap */
+  html.theme-transitioning,
+  html.theme-transitioning *,
+  html.theme-transitioning *::before,
+  html.theme-transitioning *::after {
+    transition: background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                color 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                fill 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                stroke 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    transition-delay: 0s !important;
   }
 
   /* Financial tabular numbers utility for financial data */
