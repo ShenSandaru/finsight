@@ -1,6 +1,8 @@
-from pydantic_settings import BaseSettings
 from functools import lru_cache
 from pathlib import Path
+from typing import Union
+from pydantic import field_validator
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -8,6 +10,18 @@ class Settings(BaseSettings):
     APP_NAME: str = "FinSight"
     APP_VERSION: str = "0.1.0"
     DEBUG: bool = True
+    WEB_CONCURRENCY: int = 1
+
+    # Security & CORS
+    CORS_ORIGINS: Union[list[str], str] = ["http://localhost:3000"]
+
+    @field_validator("CORS_ORIGINS", mode="after")
+    @classmethod
+    def parse_cors_origins(cls, v: Union[str, list[str]]) -> list[str]:
+        if isinstance(v, str):
+            origins = [origin.strip() for origin in v.split(",") if origin.strip()]
+            return origins or ["http://localhost:3000"]
+        return v
 
     # PostgreSQL
     POSTGRES_USER: str

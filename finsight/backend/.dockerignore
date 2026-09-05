@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+tests/
+alembic/
+evaluation/
+*.log
+.env
+.env.*
+.git/
+.gitignore
+storage/documents/*
+!storage/documents/.gitkeep
