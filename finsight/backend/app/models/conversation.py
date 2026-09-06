@@ -9,6 +9,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.config import get_settings
 
 
 class ConversationSession(Base):
@@ -19,6 +20,13 @@ class ConversationSession(Base):
         UUID(as_uuid=True),
         primary_key=True,
         default=uuid.uuid4,
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=False,
+        index=True,
+        default=lambda: uuid.UUID(get_settings().SYSTEM_USER_ID),
     )
 
     title: Mapped[str | None] = mapped_column(

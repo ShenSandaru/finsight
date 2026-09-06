@@ -120,12 +120,34 @@ class ReportService:
     async def create_report_record(
         self,
         request: CreateReportRequest,
+        user_id: uuid.UUID | None = None,
         db: AsyncSession | None = None,
     ) -> Report:
-        """Create initial Report record in pending status."""
+        """Create initial Report record in pending status scoped to user_id."""
         title = request.title.strip() if request.title and request.title.strip() else f"Research: {request.query.strip()[:60]}"
         doc_ids_serialized = [str(d) for d in request.document_ids] if request.document_ids else None
+
+        # Verify referenced document IDs belong to current user
+        if request.document_ids and user_id is not None:
+            from app.models.document import Document
+            doc_stmt = select(Document.id).where(
+                Document.id.in_(request.document_ids),
+                Document.user_id == user_id,
+            )
+            if db:
+                doc_res = await db.execute(doc_stmt)
+                owned_ids = set(doc_res.scalars().all())
+            else:
+                async with self.session_factory() as session:
+                    doc_res = await session.execute(doc_stmt)
+                    owned_ids = set(doc_res.scalars().all())
+
+            unowned = set(request.document_ids) - owned_ids
+            if unowned:
+                raise NotFoundError(f"Document(s) not found: {list(unowned)}")
+
         report = Report(
+            user_id=user_id,
             title=title,
             query=request.query.strip(),
             report_type=request.report_type,
@@ -145,10 +167,13 @@ class ReportService:
             await session.refresh(report)
             return report
 
-    async def get_report(self, report_id: uuid.UUID, db: AsyncSession | None = None) -> Report:
-        """Retrieve a Report record by UUID."""
+    async def get_report(self, report_id: uuid.UUID, user_id: uuid.UUID | None = None, db: AsyncSession | None = None) -> Report:
+        """Retrieve a Report record by UUID, optionally verifying user ownership."""
+        stmt = select(Report).where(Report.id == report_id)
+        if user_id is not None:
+            stmt = stmt.where(Report.user_id == user_id)
+
         if db:
-            stmt = select(Report).where(Report.id == report_id)
             result = await db.execute(stmt)
             report = result.scalar_one_or_none()
             if not report:
@@ -156,7 +181,6 @@ class ReportService:
             return report
 
         async with self.session_factory() as session:
-            stmt = select(Report).where(Report.id == report_id)
             result = await session.execute(stmt)
             report = result.scalar_one_or_none()
             if not report:
@@ -165,18 +189,21 @@ class ReportService:
 
     async def list_reports(
         self,
+        user_id: uuid.UUID | None = None,
         status: str | None = None,
         limit: int = 50,
         offset: int = 0,
         db: AsyncSession | None = None,
     ) -> ReportListResponse:
-        """List reports sorted newest first with optional status filtering."""
+        """List reports sorted newest first with optional status and user filtering."""
         if limit < 1 or limit > 100:
             raise ValidationError("Limit must be between 1 and 100")
         if offset < 0:
             raise ValidationError("Offset must be non-negative")
 
         query_stmt = select(Report)
+        if user_id is not None:
+            query_stmt = query_stmt.where(Report.user_id == user_id)
         if status:
             query_stmt = query_stmt.where(Report.status == status)
         query_stmt = query_stmt.order_by(desc(Report.created_at)).offset(offset).limit(limit)
@@ -192,16 +219,16 @@ class ReportService:
         responses = [self._format_report_response(r) for r in items]
         return ReportListResponse(total=len(responses), reports=responses)
 
-    async def delete_report(self, report_id: uuid.UUID, db: AsyncSession | None = None) -> None:
-        """Delete a report record without affecting source documents or chunks."""
+    async def delete_report(self, report_id: uuid.UUID, user_id: uuid.UUID | None = None, db: AsyncSession | None = None) -> None:
+        """Delete a report record without affecting source documents or chunks if owned by user."""
         if db:
-            report = await self.get_report(report_id, db=db)
+            report = await self.get_report(report_id, user_id=user_id, db=db)
             await db.delete(report)
             await db.commit()
             return
 
         async with self.session_factory() as session:
-            report = await self.get_report(report_id, db=session)
+            report = await self.get_report(report_id, user_id=user_id, db=session)
             await session.delete(report)
             await session.commit()
 

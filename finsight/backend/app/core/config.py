@@ -1,6 +1,8 @@
-from pydantic_settings import BaseSettings
 from functools import lru_cache
 from pathlib import Path
+from typing import Union
+from pydantic import field_validator
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -8,6 +10,93 @@ class Settings(BaseSettings):
     APP_NAME: str = "FinSight"
     APP_VERSION: str = "0.1.0"
     DEBUG: bool = True
+    WEB_CONCURRENCY: int = 1
+
+    ENVIRONMENT: str = "development"
+    ALLOWED_HOSTS: Union[list[str], str] = ["localhost", "127.0.0.1", "testserver", "test"]
+
+    # Security & CORS
+    CORS_ORIGINS: Union[list[str], str] = ["http://localhost:3000"]
+
+    @field_validator("ALLOWED_HOSTS", mode="after")
+    @classmethod
+    def parse_allowed_hosts(cls, v: Union[str, list[str]]) -> list[str]:
+        if isinstance(v, str):
+            hosts = [h.strip() for h in v.split(",") if h.strip()]
+            return hosts or ["localhost", "127.0.0.1", "testserver", "test"]
+        return v
+
+    @field_validator("CORS_ORIGINS", mode="after")
+    @classmethod
+    def parse_cors_origins(cls, v: Union[str, list[str]]) -> list[str]:
+        if isinstance(v, str):
+            origins = [origin.strip() for origin in v.split(",") if origin.strip()]
+            return origins or ["http://localhost:3000"]
+        return v
+
+    @field_validator("CORS_ORIGINS", mode="after")
+    @classmethod
+    def validate_cors_credentials_safety(cls, v: list[str]) -> list[str]:
+        if "*" in v:
+            raise ValueError(
+                "Unsafe CORS configuration: Wildcard '*' origin is forbidden when credentials are enabled. "
+                "Specify explicit allowed origins (e.g. 'http://localhost:3000')."
+            )
+        return v
+
+    # Authentication & Sessions
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    GOOGLE_REDIRECT_URI: str = "http://localhost:8888/api/v1/auth/google/callback"
+    SESSION_SECRET_KEY: str = "dev-session-secret-key-change-in-production"
+    SESSION_COOKIE_NAME: str = "finsight_session"
+    SESSION_MAX_AGE_SECONDS: int = 60 * 60 * 24 * 7  # 7 days (604800 seconds)
+    SESSION_COOKIE_SECURE: bool = False
+    OAUTH_STATE_COOKIE_NAME: str = "finsight_oauth_state"
+    OAUTH_STATE_MAX_AGE_SECONDS: int = 300  # 5 minutes
+    FRONTEND_URL: str = "http://localhost:3000"
+    SYSTEM_USER_ID: str = "00000000-0000-0000-0000-000000000001"
+
+    @field_validator("SESSION_COOKIE_SECURE", mode="after")
+    @classmethod
+    def validate_cookie_security(cls, v: bool, info) -> bool:
+        debug = info.data.get("DEBUG", True)
+        if not debug and not v:
+            raise ValueError(
+                "Insecure session cookie configuration: SESSION_COOKIE_SECURE must be True when DEBUG is False in production."
+            )
+        return v
+
+    @field_validator("ENVIRONMENT", mode="after")
+    @classmethod
+    def validate_environment(cls, v: str, info) -> str:
+        v_clean = v.strip().lower()
+        debug = info.data.get("DEBUG", True)
+        if v_clean == "production" and debug:
+            raise ValueError(
+                "Insecure debug configuration: DEBUG must be False when ENVIRONMENT is 'production'."
+            )
+        return v_clean
+
+    @field_validator("SESSION_SECRET_KEY", mode="after")
+    @classmethod
+    def validate_session_secret(cls, v: str, info) -> str:
+        debug = info.data.get("DEBUG", True)
+        env = info.data.get("ENVIRONMENT", "development").lower()
+        insecure_placeholders = {
+            "dev-session-secret-key-change-in-production",
+            "change-me",
+            "changeme",
+            "secret",
+            "your-secret-here",
+            "example",
+            "test",
+        }
+        if (not debug or env == "production") and (not v or v.lower() in insecure_placeholders):
+            raise ValueError(
+                "Insecure session secret configuration: SESSION_SECRET_KEY cannot use default or known placeholder values in production."
+            )
+        return v
 
     # PostgreSQL
     POSTGRES_USER: str
@@ -79,13 +168,78 @@ class Settings(BaseSettings):
     GEMINI_GENERATION_TIMEOUT_SECONDS: float = 60.0
 
     # File Storage
+    STORAGE_BACKEND: str = "local"
     STORAGE_PATH: Path = Path("/app/storage")
     MAX_FILE_SIZE: int = 50 * 1024 * 1024  # 50MB in bytes
     ALLOWED_FILE_TYPES: list[str] = ["pdf", "txt", "csv"]
 
+    @field_validator("STORAGE_BACKEND", mode="after")
+    @classmethod
+    def validate_storage_backend(cls, v: str) -> str:
+        v_clean = v.strip().lower()
+        allowed = ("local",)
+        if v_clean not in allowed:
+            raise ValueError(f"Invalid STORAGE_BACKEND '{v}'. Supported backends: {allowed}")
+        return v_clean
+
+    # Observability & Structured Logging (Phase 12.5)
+    LOG_LEVEL: str = "INFO"
+    LOG_FORMAT: str = "text"
+
+    @field_validator("LOG_LEVEL", mode="after")
+    @classmethod
+    def validate_log_level(cls, v: str) -> str:
+        v_clean = v.strip().upper()
+        allowed = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+        if v_clean not in allowed:
+            raise ValueError(f"Invalid LOG_LEVEL '{v}'. Allowed levels: {allowed}")
+        return v_clean
+
+    @field_validator("LOG_FORMAT", mode="after")
+    @classmethod
+    def validate_log_format(cls, v: str) -> str:
+        v_clean = v.strip().lower()
+        allowed = ("text", "json")
+        if v_clean not in allowed:
+            raise ValueError(f"Invalid LOG_FORMAT '{v}'. Allowed formats: {allowed}")
+        return v_clean
+
     # Chunking Configuration
     DEFAULT_CHUNK_SIZE: int = 1200
     DEFAULT_CHUNK_OVERLAP: int = 150
+
+    # Rate Limiting & Abuse Protection (Phase 12.3)
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_AUTH: str = "10/60"               # 10 req / 60 sec (Google login/callback)
+    RATE_LIMIT_RAG: str = "20/60"                # 20 req / 60 sec (LLM RAG queries)
+    RATE_LIMIT_SEARCH: str = "30/60"             # 30 req / 60 sec (Vector similarity search)
+    RATE_LIMIT_REPORTS: str = "5/60"             # 5 req / 60 sec (Prevents background job amplification)
+    RATE_LIMIT_DOCUMENT_UPLOAD: str = "10/60"    # 10 uploads / 60 sec
+    RATE_LIMIT_CONVERSATION_QUERY: str = "20/60" # 20 req / 60 sec
+    RATE_LIMIT_GENERAL: str = "100/60"           # 100 req / 60 sec (General authenticated reads)
+
+    @field_validator(
+        "RATE_LIMIT_AUTH",
+        "RATE_LIMIT_RAG",
+        "RATE_LIMIT_SEARCH",
+        "RATE_LIMIT_REPORTS",
+        "RATE_LIMIT_DOCUMENT_UPLOAD",
+        "RATE_LIMIT_CONVERSATION_QUERY",
+        "RATE_LIMIT_GENERAL",
+        mode="after",
+    )
+    @classmethod
+    def validate_rate_limit_format(cls, v: str) -> str:
+        parts = v.strip().split("/")
+        if len(parts) != 2:
+            raise ValueError(f"Invalid rate limit format '{v}'. Expected format: '<requests>/<window_seconds>' e.g. '20/60'")
+        try:
+            reqs, window = int(parts[0]), int(parts[1])
+            if reqs <= 0 or window <= 0:
+                raise ValueError()
+        except ValueError:
+            raise ValueError(f"Invalid rate limit values in '{v}'. Both requests and window_seconds must be positive integers.")
+        return v
 
     @property
     def DATABASE_URL(self) -> str:

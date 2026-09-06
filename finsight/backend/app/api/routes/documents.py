@@ -4,8 +4,11 @@ import logging
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user, get_storage
+from app.models.user import User
 from app.core.database import get_db
 from app.core.tasks import enqueue_task
+from app.core.storage import StorageBackend
 from app.core.exceptions import DocumentNotFoundError, ChunkNotFoundError, ExternalServiceError
 from app.services.document_service import DocumentService
 from app.schemas.document import (
@@ -15,6 +18,8 @@ from app.schemas.document import (
     DocumentChunkResponse,
 )
 
+from app.core.rate_limit import rate_limit
+
 logger = logging.getLogger("finsight.api.documents")
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
@@ -23,22 +28,26 @@ router = APIRouter(prefix="/documents", tags=["Documents"])
     "/upload",
     response_model=DocumentUploadResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit("document_upload", fail_closed=True))],
 )
 async def upload_document(
     file: UploadFile = File(...),
     title: str | None = Form(None),
     description: str | None = Form(None),
     source: str | None = Form(None),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    storage: StorageBackend = Depends(get_storage),
 ):
     """
-    Upload a new document (PDF, TXT, or CSV).
+    Upload a new document (PDF, TXT, or CSV) scoped to authenticated user.
 
     The document will be saved, committed, and queued for background processing.
     """
-    service = DocumentService(db)
+    service = DocumentService(db, storage=storage)
     document = await service.upload_document(
         file=file,
+        user_id=current_user.id,
         title=title,
         description=description,
         source=source,
@@ -68,13 +77,14 @@ async def upload_document(
     response_model=DocumentListResponse,
 )
 async def list_documents(
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Get all uploaded documents.
+    Get all uploaded documents owned by current user.
     """
     service = DocumentService(db)
-    documents = await service.get_all_documents()
+    documents = await service.get_all_documents(user_id=current_user.id)
 
     return DocumentListResponse(
         total=len(documents),
@@ -88,13 +98,14 @@ async def list_documents(
 )
 async def get_chunk(
     chunk_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Get a specific evidence chunk by ID for citation inspection.
+    Get a specific evidence chunk by ID for citation inspection (scoped to current user).
     """
     service = DocumentService(db)
-    chunk = await service.get_chunk(chunk_id)
+    chunk = await service.get_chunk(chunk_id, user_id=current_user.id)
 
     if not chunk:
         raise ChunkNotFoundError(
@@ -122,13 +133,14 @@ async def get_chunk(
 )
 async def get_document(
     document_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Get a specific document by ID.
+    Get a specific document by ID (scoped to current user).
     """
     service = DocumentService(db)
-    document = await service.get_document(document_id)
+    document = await service.get_document(document_id, user_id=current_user.id)
 
     if not document:
         raise DocumentNotFoundError(
@@ -145,13 +157,15 @@ async def get_document(
 )
 async def delete_document(
     document_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    storage: StorageBackend = Depends(get_storage),
 ):
     """
-    Delete a document and its associated file.
+    Delete a document and its associated file (scoped to current user).
     """
-    service = DocumentService(db)
-    deleted = await service.delete_document(document_id)
+    service = DocumentService(db, storage=storage)
+    deleted = await service.delete_document(document_id, user_id=current_user.id)
 
     if not deleted:
         raise DocumentNotFoundError(

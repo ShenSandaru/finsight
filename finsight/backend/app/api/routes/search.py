@@ -4,9 +4,13 @@ import logging
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user
+from app.models.user import User
 from app.core.database import get_db
 from app.schemas.search import SearchRequest, SearchResponse, SearchResultItem
 from app.services.retrieval_service import RetrievalService
+
+from app.core.rate_limit import rate_limit
 
 logger = logging.getLogger("finsight.api.routes.search")
 router = APIRouter(prefix="/search", tags=["Search & Retrieval"])
@@ -16,11 +20,13 @@ router = APIRouter(prefix="/search", tags=["Search & Retrieval"])
     "",
     response_model=SearchResponse,
     status_code=status.HTTP_200_OK,
+    dependencies=[Depends(rate_limit("search", fail_closed=True))],
     summary="Vector similarity search across indexed document chunks",
     description="Embeds the search query using Gemini (RETRIEVAL_QUERY task type) and executes pgvector cosine similarity search in PostgreSQL.",
 )
 async def search_chunks(
     request: SearchRequest,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SearchResponse:
     """
@@ -35,6 +41,7 @@ async def search_chunks(
             min_similarity=request.min_similarity,
             document_id=request.document_id,
             document_ids=request.document_ids,
+            user_id=current_user.id,
             db=db,
         )
 

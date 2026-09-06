@@ -25,6 +25,7 @@ import {
   RefreshCw,
   HelpCircle,
 } from "lucide-react";
+import { AuthGuard } from "@/components/auth/auth-guard";
 
 const COMPARISON_PRESETS = [
   {
@@ -98,8 +99,9 @@ export default function ComparePage() {
   };
 
   return (
-    <AppShell>
-      <div
+    <AuthGuard>
+      <AppShell>
+        <div
         className="max-w-6xl mx-auto space-y-6 pb-16 px-4 sm:px-6"
         data-testid="compare-workspace-page"
       >
@@ -260,5 +262,6 @@ export default function ComparePage() {
       {/* Citation Drawer (Phase 11.5) */}
       <CitationDrawer />
     </AppShell>
+  </AuthGuard>
   );
 }
