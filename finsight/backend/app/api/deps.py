@@ -5,10 +5,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.database import get_db
+from app.core.storage import StorageBackend, get_storage_backend
 from app.models.user import User
 from app.services.auth_service import AuthService
 
 settings = get_settings()
+
+
+def get_storage() -> StorageBackend:
+    """Dependency providing the configured StorageBackend."""
+    return get_storage_backend()
 
 
 async def get_current_user(

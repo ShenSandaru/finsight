@@ -10,6 +10,7 @@ from sqlalchemy import select, delete
 from app.core.database import async_session
 from app.core.config import get_settings
 from app.core.exceptions import ProcessingError
+from app.core.storage import get_storage_backend
 from app.models.document import Document
 from app.models.chunk import Chunk
 from app.services.pdf_parser import PDFParserService
@@ -64,8 +65,10 @@ async def process_document(ctx: dict[str, Any], document_id_str: str) -> dict[st
             document.processing_error = None
             await session.commit()
 
-            # Locate stored document file on disk
-            file_path = settings.DOCUMENTS_PATH / f"{doc_uuid}_{document.filename}"
+            # Locate stored document file via StorageBackend
+            storage = get_storage_backend()
+            storage_key = storage.get_document_key(doc_uuid, document.filename)
+            file_path = storage.get_path(storage_key)
 
             table_count = 0
             statement_counts: dict[str, int] = {}

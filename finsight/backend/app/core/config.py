@@ -116,9 +116,19 @@ class Settings(BaseSettings):
     GEMINI_GENERATION_TIMEOUT_SECONDS: float = 60.0
 
     # File Storage
+    STORAGE_BACKEND: str = "local"
     STORAGE_PATH: Path = Path("/app/storage")
     MAX_FILE_SIZE: int = 50 * 1024 * 1024  # 50MB in bytes
     ALLOWED_FILE_TYPES: list[str] = ["pdf", "txt", "csv"]
+
+    @field_validator("STORAGE_BACKEND", mode="after")
+    @classmethod
+    def validate_storage_backend(cls, v: str) -> str:
+        v_clean = v.strip().lower()
+        allowed = ("local",)
+        if v_clean not in allowed:
+            raise ValueError(f"Invalid STORAGE_BACKEND '{v}'. Supported backends: {allowed}")
+        return v_clean
 
     # Chunking Configuration
     DEFAULT_CHUNK_SIZE: int = 1200

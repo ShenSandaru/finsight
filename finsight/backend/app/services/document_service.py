@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
 from app.core.exceptions import FileValidationError, DocumentNotFoundError
+from app.core.storage import StorageBackend, get_storage_backend
 from app.models.document import Document
 from app.models.chunk import Chunk
 
@@ -18,8 +19,9 @@ settings = get_settings()
 class DocumentService:
     """Service for handling document operations."""
 
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, storage: StorageBackend | None = None):
         self.db = db
+        self.storage = storage or get_storage_backend()
 
     def validate_file_content(self, file_extension: str, content: bytes) -> None:
         """
@@ -115,24 +117,14 @@ class DocumentService:
 
         return file_extension, file_size, content
 
-    async def save_file(self, content: bytes, original_filename: str, document_id: uuid.UUID) -> Path:
+    async def save_file(self, content: bytes, original_filename: str, document_id: uuid.UUID) -> str:
         """
-        Save validated file bytes to storage using safe path handling.
-        Returns the path where the file was saved.
+        Save validated file bytes to storage using the configured StorageBackend.
+        Returns the resolved storage key.
         """
-        # Create storage directory if it doesn't exist
-        settings.DOCUMENTS_PATH.mkdir(parents=True, exist_ok=True)
-
-        # Extract only the base name to prevent path traversal attacks (../, absolute paths)
-        safe_filename_base = Path(original_filename).name
-        safe_filename = f"{document_id}_{safe_filename_base}"
-        file_path = settings.DOCUMENTS_PATH / safe_filename
-
-        # Save file using async I/O
-        async with aiofiles.open(file_path, "wb") as out_file:
-            await out_file.write(content)
-
-        return file_path
+        storage_key = self.storage.get_document_key(document_id, original_filename)
+        await self.storage.save(storage_key, content)
+        return storage_key
 
     async def create_document(
         self,
@@ -220,10 +212,9 @@ class DocumentService:
         if not document:
             return False
 
-        # Delete the file from storage
-        file_path = settings.DOCUMENTS_PATH / f"{document_id}_{document.filename}"
-        if file_path.exists():
-            file_path.unlink()
+        # Delete the file from storage via StorageBackend
+        storage_key = self.storage.get_document_key(document_id, document.filename)
+        await self.storage.delete(storage_key)
 
         # Delete from database
         await self.db.delete(document)

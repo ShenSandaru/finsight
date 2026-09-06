@@ -4,10 +4,11 @@ import logging
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_storage
 from app.models.user import User
 from app.core.database import get_db
 from app.core.tasks import enqueue_task
+from app.core.storage import StorageBackend
 from app.core.exceptions import DocumentNotFoundError, ChunkNotFoundError, ExternalServiceError
 from app.services.document_service import DocumentService
 from app.schemas.document import (
@@ -36,13 +37,14 @@ async def upload_document(
     source: str | None = Form(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    storage: StorageBackend = Depends(get_storage),
 ):
     """
     Upload a new document (PDF, TXT, or CSV) scoped to authenticated user.
 
     The document will be saved, committed, and queued for background processing.
     """
-    service = DocumentService(db)
+    service = DocumentService(db, storage=storage)
     document = await service.upload_document(
         file=file,
         user_id=current_user.id,
@@ -157,11 +159,12 @@ async def delete_document(
     document_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    storage: StorageBackend = Depends(get_storage),
 ):
     """
     Delete a document and its associated file (scoped to current user).
     """
-    service = DocumentService(db)
+    service = DocumentService(db, storage=storage)
     deleted = await service.delete_document(document_id, user_id=current_user.id)
 
     if not deleted:
