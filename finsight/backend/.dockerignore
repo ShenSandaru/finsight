@@ -6,7 +6,6 @@ __pycache__/
 .coverage
 htmlcov/
 tests/
-alembic/
 evaluation/
 *.log
 .env

@@ -139,14 +139,16 @@ class DocumentService:
         filename: str,
         file_type: str,
         file_size: int,
+        user_id: uuid.UUID,
         title: str | None = None,
         description: str | None = None,
         source: str | None = None,
     ) -> Document:
         """
-        Create a new document record in the database.
+        Create a new document record in the database belonging to user_id.
         """
         document = Document(
+            user_id=user_id,
             filename=filename,
             file_type=file_type,
             file_size=file_size,
@@ -164,12 +166,13 @@ class DocumentService:
     async def upload_document(
         self,
         file: UploadFile,
+        user_id: uuid.UUID,
         title: str | None = None,
         description: str | None = None,
         source: str | None = None,
     ) -> Document:
         """
-        Handle complete document upload process.
+        Handle complete document upload process scoped to user_id.
         """
         # Step 1: Validate type, size, and content magic bytes
         file_extension, file_size, content = await self.validate_file(file)
@@ -180,6 +183,7 @@ class DocumentService:
             filename=safe_filename_base,
             file_type=file_extension,
             file_size=file_size,
+            user_id=user_id,
             title=title,
             description=description,
             source=source,
@@ -190,26 +194,28 @@ class DocumentService:
 
         return document
 
-    async def get_document(self, document_id: uuid.UUID) -> Document | None:
-        """Get a single document by ID."""
-        result = await self.db.execute(
-            select(Document).where(Document.id == document_id)
-        )
+    async def get_document(self, document_id: uuid.UUID, user_id: uuid.UUID | None = None) -> Document | None:
+        """Get a single document by ID, optionally verifying ownership."""
+        query = select(Document).where(Document.id == document_id)
+        if user_id is not None:
+            query = query.where(Document.user_id == user_id)
+        result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_all_documents(self) -> list[Document]:
-        """Get all documents."""
-        result = await self.db.execute(
-            select(Document).order_by(Document.created_at.desc())
-        )
+    async def get_all_documents(self, user_id: uuid.UUID | None = None) -> list[Document]:
+        """Get all documents belonging to user_id."""
+        query = select(Document).order_by(Document.created_at.desc())
+        if user_id is not None:
+            query = query.where(Document.user_id == user_id)
+        result = await self.db.execute(query)
         return list(result.scalars().all())
 
-    async def delete_document(self, document_id: uuid.UUID) -> bool:
+    async def delete_document(self, document_id: uuid.UUID, user_id: uuid.UUID | None = None) -> bool:
         """
-        Delete a document and its file.
+        Delete a document and its file if owned by user_id.
         Returns True if deleted, False if not found.
         """
-        document = await self.get_document(document_id)
+        document = await self.get_document(document_id, user_id=user_id)
 
         if not document:
             return False
@@ -224,13 +230,18 @@ class DocumentService:
 
         return True
 
-    async def get_chunk(self, chunk_id: uuid.UUID) -> Chunk | None:
+    async def get_chunk(self, chunk_id: uuid.UUID, user_id: uuid.UUID | None = None) -> Chunk | None:
         """
-        Get a specific evidence chunk by ID with its parent document relationship loaded.
+        Get a specific evidence chunk by ID with its parent document relationship loaded,
+        optionally verifying user ownership.
         """
-        result = await self.db.execute(
+        query = (
             select(Chunk)
             .options(selectinload(Chunk.document))
+            .join(Document, Document.id == Chunk.document_id)
             .where(Chunk.id == chunk_id)
         )
+        if user_id is not None:
+            query = query.where(Document.user_id == user_id)
+        result = await self.db.execute(query)
         return result.scalar_one_or_none()

@@ -162,12 +162,13 @@ class RAGService:
         min_similarity: float | None = None,
         document_id: UUID | None = None,
         document_ids: list[UUID] | None = None,
+        user_id: UUID | None = None,
         db: AsyncSession | None = None,
     ) -> RAGResponse:
         """
         Execute end-to-end grounded RAG answering for a user financial question.
         1. Validates inputs.
-        2. Retrieves chunks via RetrievalService.
+        2. Retrieves chunks via RetrievalService with user ownership isolation.
         3. Checks relevance threshold (short-circuits if insufficient evidence).
         4. Assembles evidence context bounded by character limit.
         5. Calls GenerationService with grounding instructions.
@@ -200,6 +201,7 @@ class RAGService:
             min_similarity=threshold,
             document_id=document_id,
             document_ids=document_ids,
+            user_id=user_id,
             db=db,
         )
 

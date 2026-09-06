@@ -4,6 +4,8 @@ import logging
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user
+from app.models.user import User
 from app.core.database import get_db
 from app.schemas.rag import RAGRequest, RAGResponseSchema, CitationResponse
 from app.services.rag_service import RAGService
@@ -21,10 +23,11 @@ router = APIRouter(prefix="/rag", tags=["RAG & Question Answering"])
 )
 async def query_rag(
     request: RAGRequest,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> RAGResponseSchema:
     """
-    Execute grounded financial question answering over indexed document chunks.
+    Execute grounded financial question answering over indexed document chunks scoped to user.
     Returns the generated answer with structured source citations.
     """
     rag_service = RAGService()
@@ -35,6 +38,7 @@ async def query_rag(
             min_similarity=request.min_similarity,
             document_id=request.document_id,
             document_ids=request.document_ids,
+            user_id=current_user.id,
             db=db,
         )
 

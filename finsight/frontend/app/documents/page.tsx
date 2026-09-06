@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useDocuments } from "@/hooks/use-documents";
 import { useUiStore } from "@/stores/ui-store";
+import { AuthGuard } from "@/components/auth/auth-guard";
 
 export default function DocumentsPage() {
   const [showUploadZone, setShowUploadZone] = useState(false);
@@ -56,8 +57,9 @@ export default function DocumentsPage() {
   });
 
   return (
-    <AppShell>
-      <div className="space-y-6" data-testid="documents-page">
+    <AuthGuard>
+      <AppShell>
+        <div className="space-y-6" data-testid="documents-page">
         {/* Workspace Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b pb-5">
           <div>
@@ -314,5 +316,6 @@ export default function DocumentsPage() {
         )}
       </div>
     </AppShell>
+  </AuthGuard>
   );
 }

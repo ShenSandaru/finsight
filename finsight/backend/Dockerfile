@@ -23,6 +23,7 @@ RUN pip install --no-cache-dir --default-timeout=120 -r requirements.txt
 
 # Copy application source code
 COPY app/ /app/app/
+COPY alembic/ /app/alembic/
 COPY alembic.ini /app/alembic.ini
 
 # Ensure storage directories exist and assign ownership to appuser

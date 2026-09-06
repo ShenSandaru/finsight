@@ -24,6 +24,7 @@ import { CitationDrawer } from "@/components/citations/citation-drawer";
 import { GenerateReportModal } from "@/components/reports/generate-report-modal";
 import { Button } from "@/components/ui/button";
 import { FileBarChart2 } from "lucide-react";
+import { AuthGuard } from "@/components/auth/auth-guard";
 import type {
   ConversationSessionResponse,
   CitationResponse,
@@ -194,8 +195,9 @@ export default function ResearchPage() {
   const activeSession = sessions.find((s) => s.id === activeSessionId);
 
   return (
-    <AppShell>
-      <div
+    <AuthGuard>
+      <AppShell>
+        <div
         className="h-[calc(100vh-4rem)] flex flex-col sm:flex-row rounded-lg border bg-card overflow-hidden shadow-sm"
         data-testid="research-workspace-page"
       >
@@ -317,5 +319,6 @@ export default function ResearchPage() {
       {/* Citation & Evidence Inspector Drawer (Phase 11.5) */}
       <CitationDrawer />
     </AppShell>
+  </AuthGuard>
   );
 }

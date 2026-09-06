@@ -23,6 +23,29 @@ class Settings(BaseSettings):
             return origins or ["http://localhost:3000"]
         return v
 
+    # Authentication & Sessions
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    GOOGLE_REDIRECT_URI: str = "http://localhost:8888/api/v1/auth/google/callback"
+    SESSION_SECRET_KEY: str = "dev-session-secret-key-change-in-production"
+    SESSION_COOKIE_NAME: str = "finsight_session"
+    SESSION_MAX_AGE_SECONDS: int = 60 * 60 * 24 * 7  # 7 days (604800 seconds)
+    SESSION_COOKIE_SECURE: bool = False
+    OAUTH_STATE_COOKIE_NAME: str = "finsight_oauth_state"
+    OAUTH_STATE_MAX_AGE_SECONDS: int = 300  # 5 minutes
+    FRONTEND_URL: str = "http://localhost:3000"
+    SYSTEM_USER_ID: str = "00000000-0000-0000-0000-000000000001"
+
+    @field_validator("SESSION_COOKIE_SECURE", mode="after")
+    @classmethod
+    def validate_cookie_security(cls, v: bool, info) -> bool:
+        debug = info.data.get("DEBUG", True)
+        if not debug and not v:
+            raise ValueError(
+                "Insecure session cookie configuration: SESSION_COOKIE_SECURE must be True when DEBUG is False in production."
+            )
+        return v
+
     # PostgreSQL
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str

@@ -31,6 +31,7 @@ import {
   Clock,
 } from "lucide-react";
 import type { ReportStatus, ReportResponse } from "@/types/api";
+import { AuthGuard } from "@/components/auth/auth-guard";
 
 const STATUS_FILTERS: Array<{ label: string; value: ReportStatus | "all" }> = [
   { label: "All Reports", value: "all" },
@@ -100,8 +101,9 @@ export default function ReportsHistoryPage() {
   };
 
   return (
-    <AppShell>
-      <div
+    <AuthGuard>
+      <AppShell>
+        <div
         className="max-w-6xl mx-auto space-y-6 pb-16 px-4 sm:px-6"
         data-testid="reports-history-page"
       >
@@ -375,5 +377,6 @@ export default function ReportsHistoryPage() {
         />
       </div>
     </AppShell>
+  </AuthGuard>
   );
 }

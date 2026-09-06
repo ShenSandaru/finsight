@@ -13,6 +13,8 @@ import {
   ChevronLeft,
   ChevronRight,
   PanelLeft,
+  LogIn,
+  LogOut,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,6 +25,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useUiStore } from "@/stores/ui-store";
+import { useAuthStore } from "@/stores/auth-store";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { FinSightLogo } from "@/components/layout/finsight-logo";
 
@@ -72,6 +75,7 @@ export function Sidebar() {
   const sidebarOpen = useUiStore((state) => state.sidebarOpen);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
   const selectedDocumentIds = useUiStore((state) => state.selectedDocumentIds);
+  const { user, isAuthenticated, logout } = useAuthStore();
 
   return (
     <aside
@@ -192,10 +196,47 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Scoped Research Documents Status & Theme Toggle in Sidebar Footer */}
+      {/* Scoped Research Documents Status, User Session & Theme Toggle in Sidebar Footer */}
       {sidebarOpen ? (
         <div className="border-t p-3 bg-muted/20 space-y-3">
           <ThemeToggle collapsed={false} />
+
+          {/* User Account / Authentication Status */}
+          <div className="border-t border-border/50 pt-2" data-testid="sidebar-user-section">
+            {isAuthenticated && user ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/20 text-xs font-bold text-primary shrink-0">
+                    {user.name ? user.name[0].toUpperCase() : "U"}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-semibold text-foreground">{user.name}</p>
+                    <p className="truncate text-[10px] text-muted-foreground">{user.email}</p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => logout()}
+                  className="w-full justify-start text-xs h-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                  data-testid="sidebar-signout-btn"
+                >
+                  <LogOut className="mr-2 h-3.5 w-3.5" />
+                  Sign Out
+                </Button>
+              </div>
+            ) : (
+              <Link
+                href="/login"
+                className="flex items-center gap-2 text-xs font-medium text-primary hover:underline"
+                data-testid="sidebar-signin-link"
+              >
+                <LogIn className="h-4 w-4" />
+                <span>Sign In with Google</span>
+              </Link>
+            )}
+          </div>
+
           <div>
             <div className="flex items-center justify-between text-xs mb-1">
               <span className="text-muted-foreground flex items-center gap-1.5">
@@ -220,6 +261,25 @@ export function Sidebar() {
       ) : (
         <div className="border-t p-2 flex flex-col items-center gap-1 bg-muted/10">
           <ThemeToggle collapsed={true} />
+          {isAuthenticated && user ? (
+            <button
+              onClick={() => logout()}
+              title={`Signed in as ${user.name} (${user.email}). Click to Sign Out.`}
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/20 text-xs font-bold text-primary hover:bg-destructive/20 hover:text-destructive transition-colors mt-1"
+              data-testid="sidebar-collapsed-user-avatar"
+            >
+              {user.name ? user.name[0].toUpperCase() : "U"}
+            </button>
+          ) : (
+            <Link
+              href="/login"
+              title="Sign In"
+              className="p-1.5 rounded hover:bg-muted/50 transition-colors mt-1"
+              data-testid="sidebar-collapsed-signin-btn"
+            >
+              <LogIn className="h-4 w-4 text-primary shrink-0" />
+            </Link>
+          )}
           <Link
             href="/documents"
             className="flex flex-col items-center justify-center p-1.5 rounded hover:bg-muted/50 transition-colors w-full"
