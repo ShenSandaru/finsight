@@ -7,8 +7,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 
 from app.core.config import get_settings
+from app.core.logging import setup_logging
+from app.core.middleware import RequestCorrelationMiddleware
+from app.core.database import async_session
+from app.core.rate_limit import get_redis_client, close_rate_limit_redis
 from app.core.tasks import close_task_pool
-from app.core.rate_limit import close_rate_limit_redis
 from app.core.exceptions import (
     FinSightError,
     ValidationError,
@@ -19,19 +22,22 @@ from app.core.exceptions import (
 )
 from app.schemas.error import ErrorResponse, ErrorDetail
 from app.api.routes import auth, documents, tasks, search, rag, conversations, reports
+from sqlalchemy import text
 
-logger = logging.getLogger("finsight.api")
 settings = get_settings()
+setup_logging(log_level=settings.LOG_LEVEL, log_format=settings.LOG_FORMAT)
+logger = logging.getLogger("finsight.api")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print(f"🚀 Starting {settings.APP_NAME} v{settings.APP_VERSION}")
-    print("✅ Ready to handle requests (schema managed via Alembic)")
+    setup_logging(log_level=settings.LOG_LEVEL, log_format=settings.LOG_FORMAT)
+    logger.info("Starting %s v%s [env_debug=%s, log_format=%s]", settings.APP_NAME, settings.APP_VERSION, settings.DEBUG, settings.LOG_FORMAT)
+    logger.info("Ready to handle requests (schema managed via Alembic)")
 
     yield
 
-    print("👋 Shutting down...")
+    logger.info("Shutting down application resources...")
     await close_task_pool()
     await close_rate_limit_redis()
 
@@ -43,6 +49,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(RequestCorrelationMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -179,8 +186,56 @@ app.include_router(reports.router, prefix="/api/v1")
 
 @app.get("/health")
 async def health_check():
+    """Liveness check confirming the application process is running."""
     return {
         "status": "healthy",
         "app": settings.APP_NAME,
         "version": settings.APP_VERSION,
     }
+
+
+@app.get("/ready")
+async def readiness_check():
+    """
+    Readiness probe verifying critical infrastructure dependencies (PostgreSQL and Redis).
+    Returns 200 if all critical dependencies are reachable, or 503 if any dependency is down.
+    Never exposes internal connection strings or credentials.
+    """
+    checks = {
+        "postgres": "unknown",
+        "redis": "unknown",
+    }
+    all_healthy = True
+
+    # 1. PostgreSQL Check: execute SELECT 1
+    try:
+        async with async_session() as session:
+            await session.execute(text("SELECT 1"))
+        checks["postgres"] = "healthy"
+    except Exception as exc:
+        logger.warning("Readiness probe: PostgreSQL check failed: %s", type(exc).__name__)
+        checks["postgres"] = "unhealthy"
+        all_healthy = False
+
+    # 2. Redis Check: call ping()
+    try:
+        redis = get_redis_client()
+        pong = await redis.ping()
+        if pong:
+            checks["redis"] = "healthy"
+        else:
+            checks["redis"] = "unhealthy"
+            all_healthy = False
+    except Exception as exc:
+        logger.warning("Readiness probe: Redis check failed: %s", type(exc).__name__)
+        checks["redis"] = "unhealthy"
+        all_healthy = False
+
+    resp_status = status.HTTP_200_OK if all_healthy else status.HTTP_503_SERVICE_UNAVAILABLE
+    return JSONResponse(
+        status_code=resp_status,
+        content={
+            "status": "ready" if all_healthy else "not_ready",
+            "checks": checks,
+        },
+    )

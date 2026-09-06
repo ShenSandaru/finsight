@@ -37,10 +37,18 @@ async def process_document(ctx: dict[str, Any], document_id_str: str) -> dict[st
     try:
         doc_uuid = uuid.UUID(document_id_str)
     except ValueError:
-        logger.error("Invalid document UUID format '%s' in job [%s]", document_id_str, job_id)
+        logger.error(
+            "Invalid document UUID format '%s' in job [%s]",
+            document_id_str, job_id,
+            extra={"job_id": job_id, "task_name": "process_document", "status": "error"}
+        )
         return {"status": "error", "message": "Invalid UUID format"}
 
-    logger.info("Processing document [id=%s, job_id=%s]", doc_uuid, job_id)
+    logger.info(
+        "Processing document [id=%s, job_id=%s]",
+        doc_uuid, job_id,
+        extra={"job_id": job_id, "task_name": "process_document", "document_id": str(doc_uuid), "status": "started"}
+    )
     start_time = time.perf_counter()
 
     # Step 1: Parsing & Chunk Persistence Transaction (processing -> parsed)
@@ -247,12 +255,21 @@ async def process_document(ctx: dict[str, Any], document_id_str: str) -> dict[st
             raise
 
     duration = time.perf_counter() - start_time
+    duration_ms = round(duration * 1000, 2)
     logger.info(
         "Successfully indexed document '%s' (%d chunks, 1536-dim embeddings generated) in %.4fs [job_id=%s]",
         doc_uuid,
         len(persisted_chunks),
         duration,
         job_id,
+        extra={
+            "job_id": job_id,
+            "task_name": "process_document",
+            "document_id": str(doc_uuid),
+            "status": "indexed",
+            "total_chunks": len(persisted_chunks),
+            "duration_ms": duration_ms,
+        }
     )
 
     return {
@@ -319,7 +336,11 @@ async def generate_financial_report(ctx: dict[str, Any], report_id_str: str) -> 
         logger.error("Invalid report UUID format '%s' in job [%s]", report_id_str, job_id)
         return {"status": "error", "message": "Invalid UUID format"}
 
-    logger.info("Starting financial report generation [report_id=%s, job_id=%s]", rep_uuid, job_id)
+    logger.info(
+        "Starting financial report generation [report_id=%s, job_id=%s]",
+        rep_uuid, job_id,
+        extra={"job_id": job_id, "task_name": "generate_financial_report", "report_id": str(rep_uuid), "status": "started"}
+    )
     start_time = time.perf_counter()
 
     # Step 1: Transition to processing
@@ -402,11 +423,21 @@ async def generate_financial_report(ctx: dict[str, Any], report_id_str: str) -> 
                 await session.commit()
 
         duration = time.perf_counter() - start_time
+        duration_ms = round(duration * 1000, 2)
         logger.info(
             "Successfully completed financial research report '%s' in %.4fs [job_id=%s]",
             rep_uuid,
             duration,
             job_id,
+            extra={
+                "job_id": job_id,
+                "task_name": "generate_financial_report",
+                "report_id": str(rep_uuid),
+                "status": "completed" if (guardrails_result and guardrails_result.passed) else "failed",
+                "findings_count": len(serialized_findings),
+                "citations_count": len(serialized_citations),
+                "duration_ms": duration_ms,
+            }
         )
         return {
             "status": "completed",

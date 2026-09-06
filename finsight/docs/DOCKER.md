@@ -109,8 +109,11 @@ All health-monitored services will show `(healthy)`:
 
 ### Manual Health Probes
 ```bash
-# Backend liveness
+# Backend liveness (process alive, no DB/Redis dependency)
 curl http://localhost:8000/health
+
+# Backend readiness (dependency probe: verifies PostgreSQL and Redis connectivity)
+curl http://localhost:8000/ready
 
 # Frontend response
 curl -I http://localhost:3000/
@@ -124,3 +127,38 @@ curl -I http://localhost:3000/
 - **Redis**: Saved in persistent named volume `redis_data` with `--appendonly yes`.
 - **Documents**: Uploaded PDFs and text files are stored in the named volume `finsight_storage` mounted at `/app/storage`. Both the backend and worker mount this shared volume.
 - **Single-Host Architecture**: In Phase 12.1, `finsight_storage` is a Docker local named volume. Multi-node cloud object storage (S3/GCS) is planned for a subsequent phase.
+
+---
+
+## 6. Observability & Structured Logging (Phase 12.5)
+
+FinSight features a native, lightweight structured logging and request correlation architecture without external dependencies.
+
+### Environment Configuration
+- `LOG_LEVEL`: `DEBUG` | `INFO` (default) | `WARNING` | `ERROR` | `CRITICAL`
+- `LOG_FORMAT`: `json` (default for production container) | `text` (human-readable for development)
+
+### Request Tracing & Correlation
+- All inbound requests accept an optional `X-Request-ID` header (max 64 alphanumeric characters, `-` and `_`).
+- If omitted or invalid, the backend generates a cryptographically secure UUID4.
+- The canonical request ID is bound to a Python `contextvars.ContextVar` across the request lifecycle and returned in the `X-Request-ID` response header.
+
+### Sensitive Data Exclusion
+To protect confidentiality and financial privacy, logs **never** contain:
+- Authorization headers, access tokens, refresh tokens, or API keys
+- Session cookies or OAuth state tokens
+- Query strings (e.g. `/api/v1/auth/google/callback` omits `code` and `state` parameters)
+- Request bodies, raw prompts, or full LLM generated responses
+- Uploaded document contents or extracted chunk text
+
+### Viewing Logs with Docker
+```bash
+# Production JSON log inspection with jq
+docker compose -f docker-compose.prod.yml logs -f backend | jq .
+
+# Filter by specific request correlation ID
+docker compose -f docker-compose.prod.yml logs backend | jq 'select(.request_id == "01H...")'
+
+# Worker task processing logs
+docker compose -f docker-compose.prod.yml logs -f worker
+```

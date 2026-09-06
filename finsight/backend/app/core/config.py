@@ -130,6 +130,28 @@ class Settings(BaseSettings):
             raise ValueError(f"Invalid STORAGE_BACKEND '{v}'. Supported backends: {allowed}")
         return v_clean
 
+    # Observability & Structured Logging (Phase 12.5)
+    LOG_LEVEL: str = "INFO"
+    LOG_FORMAT: str = "text"
+
+    @field_validator("LOG_LEVEL", mode="after")
+    @classmethod
+    def validate_log_level(cls, v: str) -> str:
+        v_clean = v.strip().upper()
+        allowed = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+        if v_clean not in allowed:
+            raise ValueError(f"Invalid LOG_LEVEL '{v}'. Allowed levels: {allowed}")
+        return v_clean
+
+    @field_validator("LOG_FORMAT", mode="after")
+    @classmethod
+    def validate_log_format(cls, v: str) -> str:
+        v_clean = v.strip().lower()
+        allowed = ("text", "json")
+        if v_clean not in allowed:
+            raise ValueError(f"Invalid LOG_FORMAT '{v}'. Allowed formats: {allowed}")
+        return v_clean
+
     # Chunking Configuration
     DEFAULT_CHUNK_SIZE: int = 1200
     DEFAULT_CHUNK_OVERLAP: int = 150
