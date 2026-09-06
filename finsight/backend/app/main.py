@@ -8,12 +8,14 @@ from fastapi.exceptions import RequestValidationError
 
 from app.core.config import get_settings
 from app.core.tasks import close_task_pool
+from app.core.rate_limit import close_rate_limit_redis
 from app.core.exceptions import (
     FinSightError,
     ValidationError,
     NotFoundError,
     ServiceError,
     ExternalServiceError,
+    RateLimitExceeded,
 )
 from app.schemas.error import ErrorResponse, ErrorDetail
 from app.api.routes import auth, documents, tasks, search, rag, conversations, reports
@@ -31,6 +33,7 @@ async def lifespan(app: FastAPI):
 
     print("👋 Shutting down...")
     await close_task_pool()
+    await close_rate_limit_redis()
 
 
 app = FastAPI(
@@ -91,6 +94,27 @@ async def not_found_error_handler(request: Request, exc: NotFoundError) -> JSONR
         content=ErrorResponse(
             error=ErrorDetail(
                 code="NOT_FOUND",
+                message=exc.message,
+                details=exc.details,
+            )
+        ).model_dump(),
+    )
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    logger.warning("Rate limit exceeded on %s %s: %s", request.method, request.url.path, exc.message)
+    headers = {
+        "Retry-After": str(exc.retry_after),
+        "X-RateLimit-Limit": str(exc.limit),
+        "X-RateLimit-Remaining": "0",
+    }
+    return JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        headers=headers,
+        content=ErrorResponse(
+            error=ErrorDetail(
+                code="RATE_LIMIT_EXCEEDED",
                 message=exc.message,
                 details=exc.details,
             )

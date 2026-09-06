@@ -17,6 +17,7 @@ from app.schemas.conversation import (
     ConversationQueryResponse,
 )
 from app.services.conversation_service import ConversationService
+from app.core.rate_limit import rate_limit
 
 logger = logging.getLogger("finsight.api.routes.conversations")
 router = APIRouter(prefix="/conversations", tags=["Conversational Memory & Multi-Turn RAG"])
@@ -103,6 +104,7 @@ async def get_session_messages(
     "/{session_id}/query",
     response_model=ConversationQueryResponse,
     status_code=status.HTTP_200_OK,
+    dependencies=[Depends(rate_limit("conversation_query", fail_closed=True))],
     summary="Ask a multi-turn grounded financial question in a session",
 )
 async def query_conversation(

@@ -10,6 +10,8 @@ from app.core.database import get_db
 from app.schemas.search import SearchRequest, SearchResponse, SearchResultItem
 from app.services.retrieval_service import RetrievalService
 
+from app.core.rate_limit import rate_limit
+
 logger = logging.getLogger("finsight.api.routes.search")
 router = APIRouter(prefix="/search", tags=["Search & Retrieval"])
 
@@ -18,6 +20,7 @@ router = APIRouter(prefix="/search", tags=["Search & Retrieval"])
     "",
     response_model=SearchResponse,
     status_code=status.HTTP_200_OK,
+    dependencies=[Depends(rate_limit("search", fail_closed=True))],
     summary="Vector similarity search across indexed document chunks",
     description="Embeds the search query using Gemini (RETRIEVAL_QUERY task type) and executes pgvector cosine similarity search in PostgreSQL.",
 )

@@ -31,6 +31,7 @@ get_settings.cache_clear()
 from app.core.database import async_session
 from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from fastapi import Request
 from app.main import app
 from app.api.deps import get_current_user
 from app.models.user import User
@@ -55,7 +56,8 @@ def default_authenticated_user(request):
             provider_sub="system-default",
             is_active=True,
         )
-        async def override_get_current_user():
+        async def override_get_current_user(request: Request):
+            request.state.current_user = system_user
             return system_user
 
         app.dependency_overrides[get_current_user] = override_get_current_user
@@ -79,3 +81,27 @@ def db_session_factory():
         expire_on_commit=False,
     )
     return test_async_session
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limits():
+    """Flush Redis rate-limiting keys between tests using sync client to avoid async fixture loop conflicts."""
+    import redis
+    settings = get_settings()
+    try:
+        r = redis.from_url(settings.REDIS_URL, decode_responses=True)
+        keys = r.keys("finsight:rl:*")
+        if keys:
+            r.delete(*keys)
+        r.close()
+    except Exception:
+        pass
+    yield
+    try:
+        r = redis.from_url(settings.REDIS_URL, decode_responses=True)
+        keys = r.keys("finsight:rl:*")
+        if keys:
+            r.delete(*keys)
+        r.close()
+    except Exception:
+        pass

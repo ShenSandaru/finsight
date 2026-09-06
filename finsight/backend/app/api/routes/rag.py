@@ -10,6 +10,8 @@ from app.core.database import get_db
 from app.schemas.rag import RAGRequest, RAGResponseSchema, CitationResponse
 from app.services.rag_service import RAGService
 
+from app.core.rate_limit import rate_limit
+
 logger = logging.getLogger("finsight.api.routes.rag")
 router = APIRouter(prefix="/rag", tags=["RAG & Question Answering"])
 
@@ -18,6 +20,7 @@ router = APIRouter(prefix="/rag", tags=["RAG & Question Answering"])
     "/query",
     response_model=RAGResponseSchema,
     status_code=status.HTTP_200_OK,
+    dependencies=[Depends(rate_limit("rag", fail_closed=True))],
     summary="Grounded financial question answering with document citations",
     description="Retrieves relevant document chunks using pgvector and generates a grounded financial answer via Gemini.",
 )

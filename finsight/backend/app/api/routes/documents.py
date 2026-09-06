@@ -17,6 +17,8 @@ from app.schemas.document import (
     DocumentChunkResponse,
 )
 
+from app.core.rate_limit import rate_limit
+
 logger = logging.getLogger("finsight.api.documents")
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
@@ -25,6 +27,7 @@ router = APIRouter(prefix="/documents", tags=["Documents"])
     "/upload",
     response_model=DocumentUploadResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit("document_upload", fail_closed=True))],
 )
 async def upload_document(
     file: UploadFile = File(...),

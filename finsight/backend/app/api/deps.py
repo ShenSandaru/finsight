@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import Cookie, Depends, HTTPException, status
+from fastapi import Cookie, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -12,6 +12,7 @@ settings = get_settings()
 
 
 async def get_current_user(
+    request: Request,
     finsight_session: Optional[str] = Cookie(default=None, alias=settings.SESSION_COOKIE_NAME),
     db: AsyncSession = Depends(get_db),
 ) -> User:
@@ -33,6 +34,7 @@ async def get_current_user(
             detail="Invalid or expired session",
         )
 
+    request.state.current_user = user
     return user
 
 

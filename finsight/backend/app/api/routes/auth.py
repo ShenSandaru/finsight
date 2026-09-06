@@ -18,14 +18,16 @@ from app.services.auth_service import (
     validate_oauth_state,
 )
 
+from app.core.rate_limit import rate_limit
+
 logger = logging.getLogger("finsight.api.auth")
 settings = get_settings()
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
-@router.get("/google/login")
-async def google_login(request: Request):
+@router.get("/google/login", dependencies=[Depends(rate_limit("auth", fail_closed=True, authenticated=False))])
+async def google_login(request: Request, response: Response):
     """Initiate Google OAuth 2.0 / OIDC authorization flow.
 
     Generates a secure state parameter bound to an HttpOnly cookie to prevent login-CSRF
@@ -48,7 +50,7 @@ async def google_login(request: Request):
     return redirect_resp
 
 
-@router.get("/google/callback")
+@router.get("/google/callback", dependencies=[Depends(rate_limit("auth", fail_closed=True, authenticated=False))])
 async def google_callback(
     request: Request,
     response: Response,

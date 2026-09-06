@@ -12,6 +12,8 @@ from app.core.tasks import enqueue_task
 from app.schemas.report import CreateReportRequest, ReportResponse, ReportListResponse
 from app.services.report_service import ReportService
 
+from app.core.rate_limit import rate_limit
+
 logger = logging.getLogger("finsight.api.routes.reports")
 router = APIRouter(prefix="/reports", tags=["Financial Research Reports"])
 
@@ -20,6 +22,7 @@ router = APIRouter(prefix="/reports", tags=["Financial Research Reports"])
     "",
     response_model=ReportResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(rate_limit("reports", fail_closed=True))],
     summary="Create and enqueue an asynchronous financial research report",
     description="Submits a structured financial research report request to the background ARQ worker queue. Returns HTTP 202 with initial 'pending' status.",
 )

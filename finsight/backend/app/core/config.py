@@ -124,6 +124,39 @@ class Settings(BaseSettings):
     DEFAULT_CHUNK_SIZE: int = 1200
     DEFAULT_CHUNK_OVERLAP: int = 150
 
+    # Rate Limiting & Abuse Protection (Phase 12.3)
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_AUTH: str = "10/60"               # 10 req / 60 sec (Google login/callback)
+    RATE_LIMIT_RAG: str = "20/60"                # 20 req / 60 sec (LLM RAG queries)
+    RATE_LIMIT_SEARCH: str = "30/60"             # 30 req / 60 sec (Vector similarity search)
+    RATE_LIMIT_REPORTS: str = "5/60"             # 5 req / 60 sec (Prevents background job amplification)
+    RATE_LIMIT_DOCUMENT_UPLOAD: str = "10/60"    # 10 uploads / 60 sec
+    RATE_LIMIT_CONVERSATION_QUERY: str = "20/60" # 20 req / 60 sec
+    RATE_LIMIT_GENERAL: str = "100/60"           # 100 req / 60 sec (General authenticated reads)
+
+    @field_validator(
+        "RATE_LIMIT_AUTH",
+        "RATE_LIMIT_RAG",
+        "RATE_LIMIT_SEARCH",
+        "RATE_LIMIT_REPORTS",
+        "RATE_LIMIT_DOCUMENT_UPLOAD",
+        "RATE_LIMIT_CONVERSATION_QUERY",
+        "RATE_LIMIT_GENERAL",
+        mode="after",
+    )
+    @classmethod
+    def validate_rate_limit_format(cls, v: str) -> str:
+        parts = v.strip().split("/")
+        if len(parts) != 2:
+            raise ValueError(f"Invalid rate limit format '{v}'. Expected format: '<requests>/<window_seconds>' e.g. '20/60'")
+        try:
+            reqs, window = int(parts[0]), int(parts[1])
+            if reqs <= 0 or window <= 0:
+                raise ValueError()
+        except ValueError:
+            raise ValueError(f"Invalid rate limit values in '{v}'. Both requests and window_seconds must be positive integers.")
+        return v
+
     @property
     def DATABASE_URL(self) -> str:
         return (
