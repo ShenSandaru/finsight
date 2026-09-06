@@ -4,9 +4,13 @@ import logging
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user
+from app.models.user import User
 from app.core.database import get_db
 from app.schemas.rag import RAGRequest, RAGResponseSchema, CitationResponse
 from app.services.rag_service import RAGService
+
+from app.core.rate_limit import rate_limit
 
 logger = logging.getLogger("finsight.api.routes.rag")
 router = APIRouter(prefix="/rag", tags=["RAG & Question Answering"])
@@ -16,15 +20,17 @@ router = APIRouter(prefix="/rag", tags=["RAG & Question Answering"])
     "/query",
     response_model=RAGResponseSchema,
     status_code=status.HTTP_200_OK,
+    dependencies=[Depends(rate_limit("rag", fail_closed=True))],
     summary="Grounded financial question answering with document citations",
     description="Retrieves relevant document chunks using pgvector and generates a grounded financial answer via Gemini.",
 )
 async def query_rag(
     request: RAGRequest,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> RAGResponseSchema:
     """
-    Execute grounded financial question answering over indexed document chunks.
+    Execute grounded financial question answering over indexed document chunks scoped to user.
     Returns the generated answer with structured source citations.
     """
     rag_service = RAGService()
@@ -35,6 +41,7 @@ async def query_rag(
             min_similarity=request.min_similarity,
             document_id=request.document_id,
             document_ids=request.document_ids,
+            user_id=current_user.id,
             db=db,
         )
 

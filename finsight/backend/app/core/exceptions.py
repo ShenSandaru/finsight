@@ -50,3 +50,20 @@ class ProcessingError(ServiceError):
 class ExternalServiceError(FinSightError):
     """Raised when an external third-party integration (e.g. LLM API, Redis) fails."""
     pass
+
+
+class RateLimitExceeded(FinSightError):
+    """Raised when an ingress request exceeds configured rate limit threshold."""
+
+    def __init__(self, message: str, retry_after: int, limit: int, window_seconds: int):
+        super().__init__(
+            message=message,
+            details={
+                "retry_after": retry_after,
+                "limit": limit,
+                "window_seconds": window_seconds,
+            },
+        )
+        self.retry_after = retry_after
+        self.limit = limit
+        self.window_seconds = window_seconds

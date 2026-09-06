@@ -6,6 +6,7 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+from app.core.config import get_settings
 
 
 class Report(Base):
@@ -15,6 +16,13 @@ class Report(Base):
         UUID(as_uuid=True),
         primary_key=True,
         default=uuid.uuid4,
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=False,
+        index=True,
+        default=lambda: uuid.UUID(get_settings().SYSTEM_USER_ID),
     )
 
     title: Mapped[str] = mapped_column(

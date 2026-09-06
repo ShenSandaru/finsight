@@ -5,19 +5,18 @@ from typing import Any
 from arq.connections import RedisSettings
 
 from app.core.config import get_settings
+from app.core.logging import setup_logging
 from app.tasks.definitions import health_check_task, failing_test_task, process_document, generate_financial_report
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] [%(name)s] %(message)s",
-)
-logger = logging.getLogger("finsight.worker")
 settings = get_settings()
+setup_logging(log_level=settings.LOG_LEVEL, log_format=settings.LOG_FORMAT)
+logger = logging.getLogger("finsight.worker")
 
 
 async def startup(ctx: dict[str, Any]) -> None:
     """Invoked when the background worker boots."""
-    logger.info("🚀 FinSight ARQ Worker starting up...")
+    setup_logging(log_level=settings.LOG_LEVEL, log_format=settings.LOG_FORMAT)
+    logger.info("FinSight ARQ Worker starting up...")
     logger.info("Connected to queue '%s' on Redis (%s:%s)", settings.ARQ_QUEUE_NAME, settings.REDIS_HOST, settings.REDIS_PORT)
 
 

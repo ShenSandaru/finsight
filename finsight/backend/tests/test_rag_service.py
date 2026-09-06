@@ -27,11 +27,12 @@ class MockRetrievalService:
         self.called_doc_id = None
         self.embedding_service = FakeEmbeddingService()
 
-    async def search(self, query: str, top_k: int = 5, min_similarity: float | None = None, document_id: uuid.UUID | None = None, document_ids: list[uuid.UUID] | None = None, db=None) -> list[RetrievalResult]:
+    async def search(self, query: str, top_k: int = 5, min_similarity: float | None = None, document_id: uuid.UUID | None = None, document_ids: list[uuid.UUID] | None = None, user_id: uuid.UUID | None = None, db=None, **kwargs) -> list[RetrievalResult]:
         self.called_query = query
         self.called_top_k = top_k
         self.called_min_similarity = min_similarity
         self.called_doc_id = document_id
+        self.called_user_id = user_id
         if self.raise_error:
             raise self.raise_error
         return self.return_results

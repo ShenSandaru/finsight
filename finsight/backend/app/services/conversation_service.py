@@ -47,11 +47,13 @@ class ConversationService:
 
     async def create_session(
         self,
+        user_id: UUID | None = None,
         title: str | None = None,
         db: AsyncSession | None = None,
     ) -> ConversationSessionResponse:
-        """Create and persist a new conversation session."""
-        session_obj = ConversationSession(title=title.strip() if title else None)
+        """Create and persist a new conversation session belonging to user_id."""
+        effective_user_id = user_id or UUID(settings.SYSTEM_USER_ID)
+        session_obj = ConversationSession(user_id=effective_user_id, title=title.strip() if title else None)
 
         if db is not None:
             db.add(session_obj)
@@ -74,16 +76,21 @@ class ConversationService:
     async def get_session(
         self,
         session_id: UUID,
+        user_id: UUID | None = None,
         db: AsyncSession | None = None,
     ) -> ConversationSessionResponse:
-        """Fetch session metadata by UUID, raising NotFoundError if missing."""
+        """Fetch session metadata by UUID, raising NotFoundError if missing or not owned by user."""
+        conditions = [ConversationSession.id == session_id]
+        if user_id is not None:
+            conditions.append(ConversationSession.user_id == user_id)
+
         stmt = (
             select(
                 ConversationSession,
                 func.count(ConversationMessage.id).label("message_count"),
             )
             .outerjoin(ConversationMessage, ConversationMessage.session_id == ConversationSession.id)
-            .where(ConversationSession.id == session_id)
+            .where(*conditions)
             .group_by(ConversationSession.id)
         )
 
@@ -113,28 +120,24 @@ class ConversationService:
     async def delete_session(
         self,
         session_id: UUID,
+        user_id: UUID | None = None,
         db: AsyncSession | None = None,
     ) -> bool:
-        """Delete a conversation session and all cascading messages."""
+        """Delete a conversation session and all cascading messages if owned by user."""
+        # Verify ownership first (raises NotFoundError if unowned)
+        await self.get_session(session_id=session_id, user_id=user_id, db=db)
+
         if db is not None:
             sess_obj = await db.get(ConversationSession, session_id)
-            if not sess_obj:
-                raise NotFoundError(
-                    message=f"Conversation session with ID '{session_id}' not found",
-                    details={"session_id": str(session_id)},
-                )
-            await db.delete(sess_obj)
-            await db.commit()
+            if sess_obj:
+                await db.delete(sess_obj)
+                await db.commit()
         else:
             async with async_session() as session:
                 sess_obj = await session.get(ConversationSession, session_id)
-                if not sess_obj:
-                    raise NotFoundError(
-                        message=f"Conversation session with ID '{session_id}' not found",
-                        details={"session_id": str(session_id)},
-                    )
-                await session.delete(sess_obj)
-                await session.commit()
+                if sess_obj:
+                    await session.delete(sess_obj)
+                    await session.commit()
 
         return True
 
@@ -142,12 +145,17 @@ class ConversationService:
         self,
         session_id: UUID,
         limit: int = settings.CONVERSATION_MAX_HISTORY_MESSAGES,
+        user_id: UUID | None = None,
         db: AsyncSession | None = None,
     ) -> list[ConversationMessage]:
         """
         Load the most recent messages for a session in chronological order.
-        Strictly limits query by session_id to guarantee session isolation.
+        Strictly limits query by session_id and user ownership to guarantee session isolation.
         """
+        # If user_id provided, verify session ownership first
+        if user_id is not None:
+            await self.get_session(session_id=session_id, user_id=user_id, db=db)
+
         stmt = (
             select(ConversationMessage)
             .where(ConversationMessage.session_id == session_id)
@@ -209,6 +217,7 @@ class ConversationService:
         self,
         session_id: UUID,
         query: str,
+        user_id: UUID | None = None,
         top_k: int = settings.RAG_DEFAULT_TOP_K,
         min_similarity: float = settings.RAG_MIN_RELEVANCE_SCORE,
         document_id: UUID | None = None,
@@ -217,11 +226,11 @@ class ConversationService:
     ) -> ConversationQueryResponse:
         """
         Process a multi-turn financial question within an active session:
-        1. Validates session existence and query length.
+        1. Validates session existence, user ownership, and query length.
         2. Persists user message immediately.
         3. Loads recent session history.
         4. Resolves contextual follow-ups into a retrieval query.
-        5. Calls RAGService using resolved query for retrieval.
+        5. Calls RAGService with user ownership isolation for retrieval.
         6. Persists assistant answer.
         7. Returns ConversationQueryResponse with structured citations.
         """
@@ -238,8 +247,8 @@ class ConversationService:
                 details={"query_length": len(query.strip()), "max_allowed": settings.CONVERSATION_MAX_MESSAGE_CHARS},
             )
 
-        # Check session exists
-        await self.get_session(session_id=session_id, db=db)
+        # Check session exists and belongs to user_id
+        await self.get_session(session_id=session_id, user_id=user_id, db=db)
 
         # Step 2: Persist user message before executing RAG
         await self.add_message(session_id=session_id, role="user", content=query.strip(), db=db)
@@ -248,6 +257,7 @@ class ConversationService:
         history = await self.get_recent_messages(
             session_id=session_id,
             limit=settings.CONVERSATION_MAX_HISTORY_MESSAGES,
+            user_id=user_id,
             db=db,
         )
         # Exclude the user message we just added from history context
@@ -264,14 +274,20 @@ class ConversationService:
         # Step 5: Execute Multi-Turn Query via RAG/Research System
         if hasattr(self.rag_service, "called_query") or hasattr(self.rag_service, "raise_error"):
             # Custom mocked RAG service injected for testing
-            rag_response = await self.rag_service.answer(
-                query=resolved_retrieval_query,
-                top_k=top_k,
-                min_similarity=min_similarity,
-                document_id=document_id,
-                document_ids=document_ids,
-                db=db,
-            )
+            import inspect
+            sig = inspect.signature(self.rag_service.answer)
+            answer_kwargs = {
+                "query": resolved_retrieval_query,
+                "top_k": top_k,
+                "min_similarity": min_similarity,
+                "document_id": document_id,
+                "document_ids": document_ids,
+                "db": db,
+            }
+            if "user_id" in sig.parameters:
+                answer_kwargs["user_id"] = user_id
+
+            rag_response = await self.rag_service.answer(**answer_kwargs)
             final_answer = rag_response.answer
             citations = rag_response.citations
             grounded = rag_response.grounded
@@ -284,6 +300,7 @@ class ConversationService:
                 session_id=session_id,
                 document_id=document_id,
                 document_ids=document_ids,
+                user_id=user_id,
                 top_k=top_k,
                 min_similarity=min_similarity,
             )

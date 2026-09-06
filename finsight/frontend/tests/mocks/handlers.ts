@@ -14,12 +14,22 @@ import {
   mockReportList,
   mockTextChunk,
   mockTableChunk,
+  mockUser,
 } from "./data";
 import { ConversationMessageResponse } from "@/types/api";
 
 export const sessionMessagesStore: Record<string, ConversationMessageResponse[]> = {};
 
 export const handlers = [
+  // Authentication
+  http.get("*/api/v1/auth/me", () => {
+    return HttpResponse.json(mockUser);
+  }),
+
+  http.post("*/api/v1/auth/logout", () => {
+    return HttpResponse.json({ message: "Successfully logged out" });
+  }),
+
   // Health
   http.get("*/health", () => {
     return HttpResponse.json(mockHealthResponse);

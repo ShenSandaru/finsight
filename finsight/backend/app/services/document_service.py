@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
 from app.core.exceptions import FileValidationError, DocumentNotFoundError
+from app.core.storage import StorageBackend, get_storage_backend
 from app.models.document import Document
 from app.models.chunk import Chunk
 
@@ -18,8 +19,9 @@ settings = get_settings()
 class DocumentService:
     """Service for handling document operations."""
 
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, storage: StorageBackend | None = None):
         self.db = db
+        self.storage = storage or get_storage_backend()
 
     def validate_file_content(self, file_extension: str, content: bytes) -> None:
         """
@@ -95,17 +97,25 @@ class DocumentService:
                 details={"file_extension": file_extension, "allowed_types": settings.ALLOWED_FILE_TYPES}
             )
 
-        # Read file content to check size and validate magic bytes
-        content = await file.read()
-        file_size = len(content)
+        # Stream-read file content in 64KB chunks to abort early on oversized uploads before buffering
+        chunks = []
+        file_size = 0
+        chunk_size = 64 * 1024  # 64 KB
 
-        # Check file size
-        if file_size > settings.MAX_FILE_SIZE:
-            max_mb = settings.MAX_FILE_SIZE / (1024 * 1024)
-            raise FileValidationError(
-                message=f"File size exceeds maximum allowed size of {max_mb}MB",
-                details={"file_size": file_size, "max_file_size": settings.MAX_FILE_SIZE}
-            )
+        while True:
+            chunk = await file.read(chunk_size)
+            if not chunk:
+                break
+            file_size += len(chunk)
+            if file_size > settings.MAX_FILE_SIZE:
+                max_mb = settings.MAX_FILE_SIZE / (1024 * 1024)
+                raise FileValidationError(
+                    message=f"File size exceeds maximum allowed size of {max_mb}MB",
+                    details={"file_size": file_size, "max_file_size": settings.MAX_FILE_SIZE}
+                )
+            chunks.append(chunk)
+
+        content = b"".join(chunks)
 
         # Validate content / magic bytes
         self.validate_file_content(file_extension, content)
@@ -115,38 +125,30 @@ class DocumentService:
 
         return file_extension, file_size, content
 
-    async def save_file(self, content: bytes, original_filename: str, document_id: uuid.UUID) -> Path:
+    async def save_file(self, content: bytes, original_filename: str, document_id: uuid.UUID) -> str:
         """
-        Save validated file bytes to storage using safe path handling.
-        Returns the path where the file was saved.
+        Save validated file bytes to storage using the configured StorageBackend.
+        Returns the resolved storage key.
         """
-        # Create storage directory if it doesn't exist
-        settings.DOCUMENTS_PATH.mkdir(parents=True, exist_ok=True)
-
-        # Extract only the base name to prevent path traversal attacks (../, absolute paths)
-        safe_filename_base = Path(original_filename).name
-        safe_filename = f"{document_id}_{safe_filename_base}"
-        file_path = settings.DOCUMENTS_PATH / safe_filename
-
-        # Save file using async I/O
-        async with aiofiles.open(file_path, "wb") as out_file:
-            await out_file.write(content)
-
-        return file_path
+        storage_key = self.storage.get_document_key(document_id, original_filename)
+        await self.storage.save(storage_key, content)
+        return storage_key
 
     async def create_document(
         self,
         filename: str,
         file_type: str,
         file_size: int,
+        user_id: uuid.UUID,
         title: str | None = None,
         description: str | None = None,
         source: str | None = None,
     ) -> Document:
         """
-        Create a new document record in the database.
+        Create a new document record in the database belonging to user_id.
         """
         document = Document(
+            user_id=user_id,
             filename=filename,
             file_type=file_type,
             file_size=file_size,
@@ -164,12 +166,13 @@ class DocumentService:
     async def upload_document(
         self,
         file: UploadFile,
+        user_id: uuid.UUID,
         title: str | None = None,
         description: str | None = None,
         source: str | None = None,
     ) -> Document:
         """
-        Handle complete document upload process.
+        Handle complete document upload process scoped to user_id.
         """
         # Step 1: Validate type, size, and content magic bytes
         file_extension, file_size, content = await self.validate_file(file)
@@ -180,6 +183,7 @@ class DocumentService:
             filename=safe_filename_base,
             file_type=file_extension,
             file_size=file_size,
+            user_id=user_id,
             title=title,
             description=description,
             source=source,
@@ -190,47 +194,53 @@ class DocumentService:
 
         return document
 
-    async def get_document(self, document_id: uuid.UUID) -> Document | None:
-        """Get a single document by ID."""
-        result = await self.db.execute(
-            select(Document).where(Document.id == document_id)
-        )
+    async def get_document(self, document_id: uuid.UUID, user_id: uuid.UUID | None = None) -> Document | None:
+        """Get a single document by ID, optionally verifying ownership."""
+        query = select(Document).where(Document.id == document_id)
+        if user_id is not None:
+            query = query.where(Document.user_id == user_id)
+        result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_all_documents(self) -> list[Document]:
-        """Get all documents."""
-        result = await self.db.execute(
-            select(Document).order_by(Document.created_at.desc())
-        )
+    async def get_all_documents(self, user_id: uuid.UUID | None = None) -> list[Document]:
+        """Get all documents belonging to user_id."""
+        query = select(Document).order_by(Document.created_at.desc())
+        if user_id is not None:
+            query = query.where(Document.user_id == user_id)
+        result = await self.db.execute(query)
         return list(result.scalars().all())
 
-    async def delete_document(self, document_id: uuid.UUID) -> bool:
+    async def delete_document(self, document_id: uuid.UUID, user_id: uuid.UUID | None = None) -> bool:
         """
-        Delete a document and its file.
+        Delete a document and its file if owned by user_id.
         Returns True if deleted, False if not found.
         """
-        document = await self.get_document(document_id)
+        document = await self.get_document(document_id, user_id=user_id)
 
         if not document:
             return False
 
-        # Delete the file from storage
-        file_path = settings.DOCUMENTS_PATH / f"{document_id}_{document.filename}"
-        if file_path.exists():
-            file_path.unlink()
+        # Delete the file from storage via StorageBackend
+        storage_key = self.storage.get_document_key(document_id, document.filename)
+        await self.storage.delete(storage_key)
 
         # Delete from database
         await self.db.delete(document)
 
         return True
 
-    async def get_chunk(self, chunk_id: uuid.UUID) -> Chunk | None:
+    async def get_chunk(self, chunk_id: uuid.UUID, user_id: uuid.UUID | None = None) -> Chunk | None:
         """
-        Get a specific evidence chunk by ID with its parent document relationship loaded.
+        Get a specific evidence chunk by ID with its parent document relationship loaded,
+        optionally verifying user ownership.
         """
-        result = await self.db.execute(
+        query = (
             select(Chunk)
             .options(selectinload(Chunk.document))
+            .join(Document, Document.id == Chunk.document_id)
             .where(Chunk.id == chunk_id)
         )
+        if user_id is not None:
+            query = query.where(Document.user_id == user_id)
+        result = await self.db.execute(query)
         return result.scalar_one_or_none()

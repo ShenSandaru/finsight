@@ -53,6 +53,7 @@ class RetrievalService:
         min_similarity: float | None = None,
         document_id: UUID | None = None,
         document_ids: list[UUID] | None = None,
+        user_id: UUID | None = None,
         db: AsyncSession | None = None,
     ) -> list[RetrievalResult]:
         """
@@ -60,6 +61,7 @@ class RetrievalService:
         Applies HNSW ef_search within the database transaction for optimal index traversal.
         Preserves complete chunk metadata and descending similarity ordering.
         Supports single document_id or multi-document document_ids filtering.
+        Enforces user ownership isolation via Document.user_id == user_id when specified.
         """
         # Step 1: Input Validation
         if not isinstance(query, str) or not query.strip():
@@ -94,6 +96,9 @@ class RetrievalService:
             Document.status == "indexed",
             (1.0 - distance_expr) >= threshold,
         ]
+
+        if user_id is not None:
+            conditions.append(Document.user_id == user_id)
 
         if document_ids:
             # Multi-document filtering takes precedence

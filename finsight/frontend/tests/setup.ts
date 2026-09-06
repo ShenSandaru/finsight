@@ -23,15 +23,28 @@ if (typeof globalThis.AbortSignal !== "undefined" && typeof globalThis.AbortCont
   // Polyfill symbol or prototype if necessary
 }
 
+import { useAuthStore } from "@/stores/auth-store";
+import { mockUser } from "./mocks/data";
+
 // Start MSW Server before all test suites
 beforeAll(() => {
   server.listen({ onUnhandledRequest: "error" });
+  useAuthStore.setState({
+    user: mockUser,
+    isAuthenticated: true,
+    isLoading: false,
+  });
 });
 
-// Reset handlers and cleanup DOM after each test
+// Reset handlers, auth store and cleanup DOM after each test
 afterEach(() => {
   cleanup();
   server.resetHandlers();
+  useAuthStore.setState({
+    user: mockUser,
+    isAuthenticated: true,
+    isLoading: false,
+  });
 });
 
 // Clean up MSW Server after all tests
