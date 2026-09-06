@@ -49,7 +49,9 @@ cp .env.example .env
 ```
 
 Key environment variables:
-- `CORS_ORIGINS`: Comma-separated list of allowed origins (e.g. `http://localhost:3000,https://finsight.company.com`). Never uses `*` by default.
+- `ENVIRONMENT`: Deployment environment (`development` | `production`). When set to `production`, `DEBUG` must be `false` and production session secrets must not use placeholders.
+- `ALLOWED_HOSTS`: Comma-separated list of trusted Host headers (e.g. `localhost,127.0.0.1,api.finsight.company.com`). Rejects requests with spoofed or untrusted Host headers.
+- `CORS_ORIGINS`: Comma-separated list of allowed origins (e.g. `http://localhost:3000,https://finsight.company.com`). Never uses `*` when credentials/cookies are enabled.
 - `WEB_CONCURRENCY`: Uvicorn workers per backend container (defaults to `1` to avoid redundant ARQ connection pools; horizontal scaling should be performed via container replication).
 - `BACKEND_PORT`: Host port bound to FastAPI (defaults to `8000`).
 - `FRONTEND_PORT`: Host port bound to Next.js (defaults to `3000`).

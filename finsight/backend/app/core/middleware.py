@@ -49,8 +49,11 @@ class RequestCorrelationMiddleware(BaseHTTPMiddleware):
             duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
             status_code = response.status_code
 
-            # Attach X-Request-ID to outgoing response headers
+            # Attach X-Request-ID and standard security headers to outgoing response
             response.headers["X-Request-ID"] = request_id
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            response.headers["X-Frame-Options"] = "DENY"
+            response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
 
             # Safe structured logging: only method, path, status, and duration
             extra_data = {

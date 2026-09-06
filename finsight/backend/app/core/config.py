@@ -12,8 +12,19 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     WEB_CONCURRENCY: int = 1
 
+    ENVIRONMENT: str = "development"
+    ALLOWED_HOSTS: Union[list[str], str] = ["localhost", "127.0.0.1", "testserver", "test"]
+
     # Security & CORS
     CORS_ORIGINS: Union[list[str], str] = ["http://localhost:3000"]
+
+    @field_validator("ALLOWED_HOSTS", mode="after")
+    @classmethod
+    def parse_allowed_hosts(cls, v: Union[str, list[str]]) -> list[str]:
+        if isinstance(v, str):
+            hosts = [h.strip() for h in v.split(",") if h.strip()]
+            return hosts or ["localhost", "127.0.0.1", "testserver", "test"]
+        return v
 
     @field_validator("CORS_ORIGINS", mode="after")
     @classmethod
@@ -21,6 +32,16 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             origins = [origin.strip() for origin in v.split(",") if origin.strip()]
             return origins or ["http://localhost:3000"]
+        return v
+
+    @field_validator("CORS_ORIGINS", mode="after")
+    @classmethod
+    def validate_cors_credentials_safety(cls, v: list[str]) -> list[str]:
+        if "*" in v:
+            raise ValueError(
+                "Unsafe CORS configuration: Wildcard '*' origin is forbidden when credentials are enabled. "
+                "Specify explicit allowed origins (e.g. 'http://localhost:3000')."
+            )
         return v
 
     # Authentication & Sessions
@@ -43,6 +64,37 @@ class Settings(BaseSettings):
         if not debug and not v:
             raise ValueError(
                 "Insecure session cookie configuration: SESSION_COOKIE_SECURE must be True when DEBUG is False in production."
+            )
+        return v
+
+    @field_validator("ENVIRONMENT", mode="after")
+    @classmethod
+    def validate_environment(cls, v: str, info) -> str:
+        v_clean = v.strip().lower()
+        debug = info.data.get("DEBUG", True)
+        if v_clean == "production" and debug:
+            raise ValueError(
+                "Insecure debug configuration: DEBUG must be False when ENVIRONMENT is 'production'."
+            )
+        return v_clean
+
+    @field_validator("SESSION_SECRET_KEY", mode="after")
+    @classmethod
+    def validate_session_secret(cls, v: str, info) -> str:
+        debug = info.data.get("DEBUG", True)
+        env = info.data.get("ENVIRONMENT", "development").lower()
+        insecure_placeholders = {
+            "dev-session-secret-key-change-in-production",
+            "change-me",
+            "changeme",
+            "secret",
+            "your-secret-here",
+            "example",
+            "test",
+        }
+        if (not debug or env == "production") and (not v or v.lower() in insecure_placeholders):
+            raise ValueError(
+                "Insecure session secret configuration: SESSION_SECRET_KEY cannot use default or known placeholder values in production."
             )
         return v
 

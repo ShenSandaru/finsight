@@ -97,17 +97,25 @@ class DocumentService:
                 details={"file_extension": file_extension, "allowed_types": settings.ALLOWED_FILE_TYPES}
             )
 
-        # Read file content to check size and validate magic bytes
-        content = await file.read()
-        file_size = len(content)
+        # Stream-read file content in 64KB chunks to abort early on oversized uploads before buffering
+        chunks = []
+        file_size = 0
+        chunk_size = 64 * 1024  # 64 KB
 
-        # Check file size
-        if file_size > settings.MAX_FILE_SIZE:
-            max_mb = settings.MAX_FILE_SIZE / (1024 * 1024)
-            raise FileValidationError(
-                message=f"File size exceeds maximum allowed size of {max_mb}MB",
-                details={"file_size": file_size, "max_file_size": settings.MAX_FILE_SIZE}
-            )
+        while True:
+            chunk = await file.read(chunk_size)
+            if not chunk:
+                break
+            file_size += len(chunk)
+            if file_size > settings.MAX_FILE_SIZE:
+                max_mb = settings.MAX_FILE_SIZE / (1024 * 1024)
+                raise FileValidationError(
+                    message=f"File size exceeds maximum allowed size of {max_mb}MB",
+                    details={"file_size": file_size, "max_file_size": settings.MAX_FILE_SIZE}
+                )
+            chunks.append(chunk)
+
+        content = b"".join(chunks)
 
         # Validate content / magic bytes
         self.validate_file_content(file_extension, content)
