@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 from fastapi.exceptions import RequestValidationError
 
 from app.core.config import get_settings
@@ -50,6 +51,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.SESSION_SECRET_KEY,
+    session_cookie="session",
+    max_age=settings.SESSION_MAX_AGE_SECONDS,
+    same_site="lax",
+    https_only=settings.SESSION_COOKIE_SECURE,
+)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS)
 app.add_middleware(RequestCorrelationMiddleware)
 app.add_middleware(

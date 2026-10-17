@@ -46,17 +46,63 @@ async def test_auth_me_with_invalid_cookie_returns_401(db_session_factory):
 
 
 @pytest.mark.asyncio
-async def test_google_login_redirect_sets_state_cookie():
+async def test_session_middleware_registered():
+    """Verify that Starlette SessionMiddleware is registered with secure settings."""
+    from starlette.middleware.sessions import SessionMiddleware
+
+    middleware_classes = [m.cls for m in app.user_middleware]
+    assert SessionMiddleware in middleware_classes, "SessionMiddleware must be registered in app.user_middleware"
+
+    session_mw = next(m for m in app.user_middleware if m.cls == SessionMiddleware)
+    assert session_mw.kwargs["same_site"] == "lax"
+    assert session_mw.kwargs["secret_key"] == settings.SESSION_SECRET_KEY
+    assert session_mw.kwargs["session_cookie"] == "session"
+    # Ensure SessionMiddleware cookie does not collide with user session cookie
+    assert session_mw.kwargs["session_cookie"] != settings.SESSION_COOKIE_NAME
+
+
+@pytest.mark.asyncio
+async def test_google_login_exercises_real_session_middleware():
+    """Verify that the OAuth login route executes Authlib's real save_authorize_data
+    and populates request.session through Starlette SessionMiddleware without raising
+    AssertionError: SessionMiddleware must be installed to access request.session.
+    """
     register_google_oauth()
-    with patch.object(oauth.google, "authorize_redirect") as mock_redirect:
-        from fastapi.responses import RedirectResponse
-        mock_redirect.return_value = RedirectResponse(url="https://accounts.google.com/o/oauth2/v2/auth", status_code=302)
+    mock_auth_url_result = {
+        "url": "https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=test_client&redirect_uri=http%3A%2F%2Ftest%2Fcallback&state=mock_state&nonce=mock_nonce",
+        "state": "mock_state",
+        "nonce": "mock_nonce",
+    }
+    # Mock only external URL generation, allowing real authorize_redirect and save_authorize_data to execute
+    with patch.object(oauth.google, "create_authorization_url", AsyncMock(return_value=mock_auth_url_result)):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             response = await ac.get("/api/v1/auth/google/login", follow_redirects=False)
+
         assert response.status_code == 302
         assert "accounts.google.com" in response.headers["location"]
+        # FinSight's cryptographic HMAC state cookie
         assert settings.OAUTH_STATE_COOKIE_NAME in response.headers.get("set-cookie", "")
+        # Starlette SessionMiddleware signed session cookie set by Authlib save_authorize_data
+        assert "session=" in response.headers.get("set-cookie", "")
+
+
+@pytest.mark.asyncio
+async def test_missing_oauth_credentials_handled_safely():
+    """Verify that unconfigured OAuth credentials produce valid redirect without leaking secrets."""
+    register_google_oauth()
+    mock_auth_url_result = {
+        "url": "https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=&redirect_uri=http%3A%2F%2Ftest%2Fcallback&state=mock_state",
+        "state": "mock_state",
+    }
+    with patch.object(oauth.google, "create_authorization_url", AsyncMock(return_value=mock_auth_url_result)):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            response = await ac.get("/api/v1/auth/google/login", follow_redirects=False)
+
+        assert response.status_code == 302
+        # Secret values must never appear in query params or response headers
+        assert "secret" not in response.headers["location"].lower()
 
 
 @pytest.mark.asyncio

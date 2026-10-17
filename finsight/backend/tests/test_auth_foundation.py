@@ -105,9 +105,9 @@ def test_production_cookie_security_validation():
     assert s2.SESSION_COOKIE_SECURE is True
 
     # 3. DEBUG=False + Secure=True -> allowed
-    s3 = Settings(DEBUG=False, SESSION_COOKIE_SECURE=True)
+    s3 = Settings(DEBUG=False, SESSION_COOKIE_SECURE=True, SESSION_SECRET_KEY="secure-prod-key-123456789012345")
     assert s3.SESSION_COOKIE_SECURE is True
 
     # 4. DEBUG=False + Secure=False -> rejected with ValueError
     with pytest.raises(ValueError, match="Insecure session cookie configuration"):
-        Settings(DEBUG=False, SESSION_COOKIE_SECURE=False)
+        Settings(DEBUG=False, SESSION_COOKIE_SECURE=False, SESSION_SECRET_KEY="secure-prod-key-123456789012345")
