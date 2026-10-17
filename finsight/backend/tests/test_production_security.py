@@ -12,6 +12,7 @@ Covers:
 9. Container non-root user verification and Docker security properties.
 """
 
+from pathlib import Path
 import asyncio
 import io
 import json
@@ -23,6 +24,8 @@ from app.core.config import Settings
 from app.main import app
 from app.services.document_service import DocumentService
 from app.core.exceptions import FileValidationError
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 @pytest.mark.asyncio
@@ -161,20 +164,20 @@ class TestContainerSecurityProperties:
     """Static security verification of Dockerfiles and Compose configurations."""
 
     def test_backend_dockerfile_runs_as_non_root(self):
-        with open("backend/Dockerfile", "r", encoding="utf-8") as f:
+        with open(PROJECT_ROOT / "backend" / "Dockerfile", "r", encoding="utf-8") as f:
             content = f.read()
         assert "USER appuser" in content
         assert "groupadd" in content
         assert "useradd" in content
 
     def test_frontend_dockerfile_runs_as_non_root(self):
-        with open("frontend/Dockerfile", "r", encoding="utf-8") as f:
+        with open(PROJECT_ROOT / "frontend" / "Dockerfile", "r", encoding="utf-8") as f:
             content = f.read()
         assert "USER nextjs" in content
         assert "addgroup" in content
         assert "adduser" in content
 
     def test_docker_compose_prod_no_privileged_containers(self):
-        with open("docker-compose.prod.yml", "r", encoding="utf-8") as f:
+        with open(PROJECT_ROOT / "docker-compose.prod.yml", "r", encoding="utf-8") as f:
             content = f.read()
         assert "privileged: true" not in content
